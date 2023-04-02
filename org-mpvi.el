@@ -196,7 +196,7 @@ DESC is optional, used to describe the current timestamp link."
   (if (string-match "^\\([^#]+\\)\\(?:#\\([0-9:.]+\\)?-?\\([0-9:.]+\\)?\\)?$" link)
       (let ((path (match-string 1 link))
             (beg (match-string 2 link))
-            (end   (match-string 3 link)))
+            (end (match-string 3 link)))
         (list path (org-mpvi-time-to-secs beg) (org-mpvi-time-to-secs end)))
     (user-error "Link is not valid")))
 
@@ -563,10 +563,12 @@ This can be used by `org-mpvi-open-from-favors' to quick open video."
         (org-mpvi-open path)
       (throw 'org-mpvi-open (list path 'play)))))
 
-(defvar-keymap org-mpvi-open-map
-  :parent minibuffer-local-map
-  "C-x b"        #'org-mpvi-open-from-favors
-  "C-x <return>" (lambda () (interactive) (throw 'org-mpvi-open (list (minibuffer-contents) 'add))))
+(defvar org-mpvi-open-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map minibuffer-local-map)
+    (define-key map (kbd "C-x b") #'org-mpvi-open-from-favors)
+    (define-key map (kbd "C-x <return>") (lambda () (interactive) (throw 'org-mpvi-open (list (minibuffer-contents) 'add))))
+    map))
 
 ;;;###autoload
 (defun org-mpvi-insert (&optional prompt)
@@ -826,40 +828,42 @@ If any, prompt user to choose one video in playlist to play."
         (message ""))
     (user-error "No playing path found")))
 
-(defvar-keymap org-mpvi-seek-map
-  :parent minibuffer-local-map
-  "i"   #'org-mpvi-seek-insert
-  "g"   #'org-mpvi-seek-revert
-  "n"   (lambda () (interactive) (org-mpvi-seek-walk 1))
-  "p"   (lambda () (interactive) (org-mpvi-seek-walk -1))
-  "N"   (lambda () (interactive) (org-mpvi-seek-walk "1%"))
-  "P"   (lambda () (interactive) (org-mpvi-seek-walk "-1%"))
-  "M-n" (lambda () (interactive) (org-mpvi-seek-walk :ff))
-  "M-p" (lambda () (interactive) (org-mpvi-seek-walk :fb))
-  "C-l" (lambda () (interactive) (org-mpvi-seek-walk 0))
-  "C-n" (lambda () (interactive) (org-mpvi-seek-walk 1))
-  "C-p" (lambda () (interactive) (org-mpvi-seek-walk -1))
-  "M-<" (lambda () (interactive) (org-mpvi-seek-revert 0))
-  "k"   (lambda () (interactive) (org-mpvi-seek-speed 1))
-  "j"   (lambda () (interactive) (org-mpvi-seek-speed -1))
-  "l"   #'org-mpvi-seek-speed
-  "<"   #'mpv-chapter-prev
-  ">"   #'mpv-chapter-next
-  "v"   #'org-mpvi-current-playing-switch-playlist
-  "C-v" #'org-mpvi-current-playing-switch-playlist
-  "s"   #'org-mpvi-seek-capture-save-as
-  "C-s" #'org-mpvi-seek-capture-to-clipboard
-  "C-i" #'org-mpvi-seek-capture-as-attach
-  "r"   #'org-mpvi-seek-ocr-to-kill-ring
-  "C-r" #'org-mpvi-seek-ocr-to-kill-ring
-  "t"   #'org-mpvi-seek-copy-sub-text
-  "C-t" #'org-mpvi-seek-copy-sub-text
-  "T"   #'org-mpvi-current-playing-load-subtitle
-  "SPC" #'org-mpvi-seek-pause
-  "o"   #'org-mpvi-current-playing-open-externally
-  "C-o" #'org-mpvi-current-playing-open-externally
-  "q"   #'minibuffer-keyboard-quit
-  "C-q" #'minibuffer-keyboard-quit)
+(defvar org-mpvi-seek-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map minibuffer-local-map)
+    (define-key map (kbd "i")   #'org-mpvi-seek-insert)
+    (define-key map (kbd "g")   #'org-mpvi-seek-revert)
+    (define-key map (kbd "n")   (lambda () (interactive) (org-mpvi-seek-walk 1)))
+    (define-key map (kbd "p")   (lambda () (interactive) (org-mpvi-seek-walk -1)))
+    (define-key map (kbd "N")   (lambda () (interactive) (org-mpvi-seek-walk "1%")))
+    (define-key map (kbd "P")   (lambda () (interactive) (org-mpvi-seek-walk "-1%")))
+    (define-key map (kbd "M-n") (lambda () (interactive) (org-mpvi-seek-walk :ff)))
+    (define-key map (kbd "M-p") (lambda () (interactive) (org-mpvi-seek-walk :fb)))
+    (define-key map (kbd "C-l") (lambda () (interactive) (org-mpvi-seek-walk 0)))
+    (define-key map (kbd "C-n") (lambda () (interactive) (org-mpvi-seek-walk 1)))
+    (define-key map (kbd "C-p") (lambda () (interactive) (org-mpvi-seek-walk -1)))
+    (define-key map (kbd "M-<") (lambda () (interactive) (org-mpvi-seek-revert 0)))
+    (define-key map (kbd "k")   (lambda () (interactive) (org-mpvi-seek-speed 1)))
+    (define-key map (kbd "j")   (lambda () (interactive) (org-mpvi-seek-speed -1)))
+    (define-key map (kbd "l")   #'org-mpvi-seek-speed)
+    (define-key map (kbd "<")   #'mpv-chapter-prev)
+    (define-key map (kbd ">")   #'mpv-chapter-next)
+    (define-key map (kbd "v")   #'org-mpvi-current-playing-switch-playlist)
+    (define-key map (kbd "C-v") #'org-mpvi-current-playing-switch-playlist)
+    (define-key map (kbd "s")   #'org-mpvi-seek-capture-save-as)
+    (define-key map (kbd "C-s") #'org-mpvi-seek-capture-to-clipboard)
+    (define-key map (kbd "C-i") #'org-mpvi-seek-capture-as-attach)
+    (define-key map (kbd "r")   #'org-mpvi-seek-ocr-to-kill-ring)
+    (define-key map (kbd "C-r") #'org-mpvi-seek-ocr-to-kill-ring)
+    (define-key map (kbd "t")   #'org-mpvi-seek-copy-sub-text)
+    (define-key map (kbd "C-t") #'org-mpvi-seek-copy-sub-text)
+    (define-key map (kbd "T")   #'org-mpvi-current-playing-load-subtitle)
+    (define-key map (kbd "SPC") #'org-mpvi-seek-pause)
+    (define-key map (kbd "o")   #'org-mpvi-current-playing-open-externally)
+    (define-key map (kbd "C-o") #'org-mpvi-current-playing-open-externally)
+    (define-key map (kbd "q")   #'minibuffer-keyboard-quit)
+    (define-key map (kbd "C-q") #'minibuffer-keyboard-quit)
+    map))
 
 ;;;###autoload
 (defun org-mpvi-clip (path &optional target beg end)
@@ -912,15 +916,17 @@ Default handle current video at point."
 
 (defvar org-mpvi-link-face '(:inherit org-link :underline nil :box (:style flat-button)))
 
-(defvar-keymap org-mpvi-link-keymap
-  :parent org-mouse-map
-  ", s"   #'org-mpvi-current-link-seek
-  ", a"   #'org-mpvi-insert
-  ", b"   #'org-mpvi-current-link-update-end-pos
-  ", v"   #'org-mpvi-current-link-show-preview
-  ", c"   #'org-mpvi-clip
-  ", ,"   #'org-open-at-point
-  ", SPC" #'mpv-pause)
+(defvar org-mpvi-link-keymap
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map org-mouse-map)
+    (define-key map (kbd ", s")   #'org-mpvi-current-link-seek)
+    (define-key map (kbd ", a")   #'org-mpvi-insert)
+    (define-key map (kbd ", b")   #'org-mpvi-current-link-update-end-pos)
+    (define-key map (kbd ", v")   #'org-mpvi-current-link-show-preview)
+    (define-key map (kbd ", c")   #'org-mpvi-clip)
+    (define-key map (kbd ", ,")   #'org-open-at-point)
+    (define-key map (kbd ", SPC") #'mpv-pause)
+    map))
 
 (defun org-mpvi-link-push (link)
   "Play this LINK."
