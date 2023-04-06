@@ -137,8 +137,8 @@ When GROUPP not nil then try to insert commas to string for better reading."
          ;; A hangs issue:
          ;; https://www.reddit.com/r/emacs/comments/da9h10/why_does_shellcommand_hang_using_xclip_filter_to/
          "xclip -selection clipboard -t image/png -filter < \"%s\" &>/dev/null")
-        ((executable-find "powershell")
-         "powershell -Command (Get-Content '%s' | Set-Clipboard -Format Image)")))
+        ((and (executable-find "powershell") (memq system-type '(cygwin windows-nt)))
+         "powershell -Command \"Add-Type -AssemblyName System.Windows.Forms; [Windows.Forms.Clipboard]::SetImage($([System.Drawing.Image]::Fromfile(\\\"%s\\\")))\"")))
 
 (defun org-mpvi-image-to-clipboard (image-file)
   "Save IMAGE-FILE data to system clipboard.

@@ -24,15 +24,22 @@ Knock knock, [English Help](README-en.md).
 
 之后安装相关依赖。除了 [mpv](https://mpv.io/) 是必须的外，其他的是可选的:
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp)，如果要看网络视频，这个必须要安装
-- [ffmpeg](https://ffmpeg.org/), 用来对视频进行剪辑之类的操作
-- [seam](https://github.com/Borber/seam)，用来解析直播链接，要看直播的需要安装
+- [ffmpeg](https://ffmpeg.org/)，用来对视频进行剪辑之类的操作
+- [tesseract](https://github.com/tesseract-ocr/tesseract)，如果需要文字识别 (OCR) 功能才安装
 - [danmaku2ass](https://github.com/m13253/danmaku2ass)，安装这个后，看 B 站视频就有弹幕啦
-- [tesseract](https://github.com/tesseract-ocr/tesseract)，需要用这个来进行画面的文字识别 (OCR)
+- [seam](https://github.com/Borber/seam)，用来解析直播链接，要看直播的需要安装
 
 对于 Arch Linux 用户，一键安装依赖:
 ```sh
-yay -S mpv ffmpeg yt-dlp tesseract xclip danmaku2ass-git seam-git
+yay -S mpv yt-dlp ffmpeg tesseract danmaku2ass-git seam-git xclip
 ```
+
+对于 Windows 用户，danmaku2ass 和 seam 需要从 Github 下载，其他可以通过 winget 或 scoop 安装:
+```sh
+winget install mpv yt-dlp ffmpeg Tesseract-OCR
+```
+
+PS: 当下还无法在 Windows 使用。我还没找到合适的在 Windows 上建立 Named Pipe 连接的方法。
 
 ## 使用
 
