@@ -39,8 +39,6 @@ yay -S mpv yt-dlp ffmpeg tesseract danmaku2ass-git seam-git xclip
 winget install mpv yt-dlp ffmpeg Tesseract-OCR
 ```
 
-PS: 当下还无法在 Windows 使用。我还没找到合适的在 Windows 上建立 Named Pipe 连接的方法。
-
 ## 使用
 
 主要有 3 个命令:

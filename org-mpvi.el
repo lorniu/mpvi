@@ -312,7 +312,7 @@ When PATH is nil then return the path of current playing video."
             (mpv-on-start-hook (cons hook mpv-on-start-hook)))
         (format "Waiting %s..." path)
         (org-mpvi-log "MPV start extra options: %s" mpv-default-options)
-        (apply #'mpv-start path (format "--start=+%s" beg)
+        (apply #'org-mpvi-start path (format "--start=+%s" beg)
                (if end (list (format "--ab-loop-a=%s" beg)
                              (format "--ab-loop-b=%s" end))))
         (push path org-mpvi-play-history))))
@@ -493,8 +493,109 @@ Pass extra OPTS to mpv if it is not nil."
       (shell-command command (current-buffer))
       (goto-char (point-min))
       (if (re-search-forward "^yt-dlp: error:.*$" nil t)
-          (user-error "Error to get `yt-dlp' template/%s: %S" (match-string 0))
+          (user-error "Error to get `yt-dlp' template/%s: %S" field (match-string 0))
         (string-trim (buffer-string))))))
+
+
+;;; Patch 'mpv.el' for Windows
+
+(defun org-mpvi-start (&rest args)
+  "Start an mpv process with the specified ARGS.
+This is just `mpv-start' that with windows support."
+  (mpv-kill)
+  (let ((pipe (make-temp-name "mpv-")))
+    (unless (equal system-type 'windows-nt)
+      (setq pipe (expand-file-name name temporary-file-directory)))
+    (setq mpv--process
+          (apply #'start-process "mpv-player" nil mpv-executable
+                 "--no-terminal"
+                 (concat "--input-ipc-server=" pipe)
+                 (append mpv-default-options args)))
+    (set-process-query-on-exit-flag mpv--process nil)
+    (set-process-sentinel
+     mpv--process
+     (lambda (process _event)
+       (when (memq (process-status process) '(exit signal))
+         (mpv-kill)
+         (when (file-exists-p pipe)
+           (with-demoted-errors (delete-file pipe)))
+         (run-hooks 'mpv-on-exit-hook))))
+    (org-mpvi-connect pipe)
+    (run-hook-with-args 'mpv-on-start-hook args)
+    t))
+
+(defun org-mpvi-connect (pipename)
+  "Connect to mpv via named pipe.
+PIPENAME should be name of pipe on Windows or socket file on others."
+  (interactive (list (read-string "Connect to pipe with name/socket: ")))
+  (with-timeout (mpv-start-timeout
+                 (mpv-kill)
+                 (error "Failed to connect to MPV"))
+    (while (not (if (equal system-type 'windows-nt)
+                    (org-mpvi-named-pipe-exists-p pipename)
+                  (file-exists-p pipename)))
+      (sleep-for 0.05)))
+  (setq mpv--queue (tq-create
+                    (if (equal system-type 'windows-nt)
+                        (org-mpvi-make-named-pipe-client-process pipename)
+                      (make-network-process :name "mpv-socket"
+                                            :family 'local
+                                            :service pipename))))
+  (set-process-filter (tq-process mpv--queue)
+                      (lambda (_proc string)
+                        (let ((buffer (tq-buffer mpv--queue)))
+                          (when (buffer-live-p buffer)
+                            (with-current-buffer buffer
+                              (goto-char (point-max))
+                              (insert string)
+                              (when (equal system-type 'windows-nt)
+                                (goto-char (point-min))
+                                ;; when find error raised by powershell
+                                (skip-chars-forward " \n\r\t")
+                                (unless (or (eobp) (equal (char-after) ?\{))
+                                  (user-error "Pipe error: %s" (string-trim (buffer-string))))
+                                ;; powershell will output read-host content, filter it
+                                (while (re-search-forward "{\"command\":[^}]+}" nil t)
+                                  (delete-region (match-beginning 0) (match-end 0))))
+                              (mpv--tq-process-buffer mpv--queue)))))))
+
+(defun org-mpvi-named-pipe-exists-p (pipename)
+  "Check if pipe with PIPENAME exists on Windows."
+  (unless (executable-find "powershell")
+    (user-error "Cannot find PowerShell"))
+  (with-temp-buffer
+    (call-process "powershell" nil t nil
+                  "-Command"
+                  (format "& {Get-ChildItem \\\\.\\pipe\\ | Where-Object {$_.Name -eq '%s'}}"
+                          pipename))
+    (> (length (buffer-string)) 0)))
+
+(defun org-mpvi-make-named-pipe-client-process (pipename)
+  "Connect to named pipe server with PIPENAME for Windows.
+Implement with `powershell'."
+  (let* ((ps1 " $conn = [System.IO.Pipes.NamedPipeClientStream]::new('.', '%s');
+                try {
+                  $reader = [System.IO.StreamReader]::new($conn);
+                  $writer = [System.IO.StreamWriter]::new($conn);
+                  $conn.Connect(5000);
+                  while (1) {
+                    $msg = Read-Host;
+                    $writer.WriteLine($msg);
+                    $writer.Flush();
+                    $conn.WaitForPipeDrain();
+                    do {
+                      $ret = $reader.ReadLine();
+                      Write-Host $ret;
+                    } while ($ret -match '\"event\":');
+                  }
+                }
+                catch [System.TimeoutException], [System.InvalidOperationException] { Write-Host 'Connect to MPV failed'; }
+                catch { Write-Host $_; }
+                finally { $conn.Dispose(); } ")
+         (cmd (format "& {%s}" (replace-regexp-in-string "[ \n\r\t]+" " " (format ps1 pipename)))))
+    (make-process :name "mpv-socket"
+                  :connection-type 'pipe
+                  :command (list "powershell" "-NoProfile" "-Command" cmd))))
 
 
 ;;; Commands and Keybinds
