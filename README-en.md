@@ -1,30 +1,74 @@
 # Integrate Org with Video
 
+What can do:
+- Watch video (local, remote, living) with MPV
+- Controll MPV with emacs
+- Integrate with Org Mode, make taking video-notes easily
+- Integrate Clip/Screenshot/OCR and so on
+
+Similar projects
+- https://github.com/yuchen-lea/org-media-note
+- https://github.com/bpanthi977/org-mpv-notes
+
+I just wrote this for fun. Now release it for the ones who need it.
+
 ## Installation
 
-- Make sure `mpv.el` is installed
+- It's based on [mpv.el](https://github.com/kljohann/mpv.el), make sure it is installed
 - Download and add this repo to your `load-path`, then `(require 'org-mpvi)`
-- Install the dependencies:
-  + [mpv](https://mpv.io/), required
-  + [yt-dlp](https://github.com/yt-dlp/yt-dlp), for web video
+- Install [mpv](https://mpv.io/) and [yt-dlp](https://github.com/yt-dlp/yt-dlp), they are the main dependencies.
+- [Optional] Install dependencies you need:
   + [ffmpeg](https://ffmpeg.org/), used to clip video
-  + [seam](https://github.com/Borber/seam), used to extract video url for living
-  + [danmaku2ass](https://github.com/m13253/danmaku2ass), used to convert danmaku file
   + [tesseract](https://github.com/tesseract-ocr/tesseract), used to OCR
+  + [danmaku2ass](https://github.com/m13253/danmaku2ass), danmaku file converter, used when watching bilibili.com
+  + [seam](https://github.com/Borber/seam), living video extractor, used when watching some live sites
 
-For Arch Linux User:
+For Arch Linux User, all dependencies with one command:
 ```sh
 yay -S mpv ffmpeg yt-dlp tesseract xclip danmaku2ass-git seam-git
 ```
 
+Windows User can install dependencies with `winget` or `scoop`:
+```sh
+winget install mpv yt-dlp ffmpeg Tesseract-OCR
+```
+
 ## Usage
 
-Core commands:
-1. `org-mpvi-open`, open local video or remote video with MPV
-2. `org-mpvi-seek`, use minibuffer to control opened MPV
-3. `org-mpvi-insert`, insert link with timestamp to current org buffer
+Three core commands:
+1. `org-mpvi-open`, open video (local or remote) with MPV
+2. `org-mpvi-seek`, control opened MPV with minibuffer
+3. `org-mpvi-insert`, insert timestamp link of video to current org buffer
 
-Look the maps for the keybinds:
+Command `org-mpvi-seek` is the most frequently used one. It integrates many functions through minibuffer:
+- `i` Insert timestamp link into current buffer
+- `Space` Toggle play and pause
+- `j/k/l` Change the playback speed
+- `n/p/N/P/M-n/M-p` Seek to any position smartly
+- `s/C-s/C-i` Multiple ways to take screenshots
+- `r/C-r` OCR recognition of the current playback screen
+- `t/C-t` Copy subtitle of the current playback screen
+- `v/C-v` Switch playlist/category
+- `o/C-o` Switch to system program (for example, browser) to continue the playing
+- `q/C-q` quit minibuffer
+
+Timestamp link is link of format `[mpv:https://xxx.com#10-30]`. It's clickable and responses below shortcuts when cursor on it:
+- `, s` Enter `org-mpvi-seek` interface
+- `, ,` Play video in current link
+- `, a` Change the start time in current link
+- `, b` Change the end time in current link
+- `, v` Preview the screenshot of current time position in current link
+- `, c` Video download, transcode, clip and so on, **ALL IN ONE**.
+
+Look the keymap definitions for more:
 - `org-mpvi-open-map`
 - `org-mpvi-seek-map`
-- `org-mpvi-link-keymap` (mpv link at point)
+- `org-mpvi-link-keymap`
+
+## Miscellaneous
+
+Thanks to similar projects in the community, you teach me a lot and give me so much inspiration.
+
+Thanks to open source software like MPV/FFMPEG/EMACS, you make the world more wonderful.
+
+Finally, thanks to all the platforms and authors who contributed great videos, you guys make me happier and stronger. :)
