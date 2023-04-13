@@ -505,7 +505,7 @@ This is just `mpv-start' that with windows support."
   (mpv-kill)
   (let ((pipe (make-temp-name "mpv-")))
     (unless (equal system-type 'windows-nt)
-      (setq pipe (expand-file-name name temporary-file-directory)))
+      (setq pipe (expand-file-name pipe temporary-file-directory)))
     (setq mpv--process
           (apply #'start-process "mpv-player" nil mpv-executable
                  "--no-terminal"
