@@ -202,6 +202,8 @@ DESC is optional, used to describe the current timestamp link."
 
 (defun org-mpvi-parse-link-at-point ()
   "Return the mpv link object at point."
+  (unless (derived-mode-p 'org-mode)
+    (user-error "You must parse MPV link in org mode."))
   (let ((node (cadr (org-element-context))))
     (when (equal "mpv" (plist-get node :type))
       (let ((meta (org-mpvi-parse-link (plist-get node :path)))
@@ -971,14 +973,13 @@ If any, prompt user to choose one video in playlist to play."
   "Cut or convert video for PATH from BEG to END, save to TARGET.
 Default handle current video at point."
   (interactive
-   (org-mpvi-with-current-mpv-link (node)
-     (if node
-         (let ((path (plist-get node :path)))
-           (if (or (mpv--url-p path) (file-exists-p path))
-               (list path (org-mpvi-read-file-name "Convert video to: " path)
-                     (plist-get node :vbeg) (plist-get node :vend))
-             (user-error "File not found: %s" path)))
-       (user-error "No mpv link at point"))))
+   (if-let ((node (org-mpvi-parse-link-at-point)))
+       (let ((path (plist-get node :path)))
+         (if (or (mpv--url-p path) (file-exists-p path))
+             (list path (org-mpvi-read-file-name "Save to: " path)
+                   (plist-get node :vbeg) (plist-get node :vend))
+           (user-error "File not found: %s" path)))
+     (user-error "No MPV link found at point")))
   (funcall (if (mpv--url-p path) org-mpvi-remote-video-handler org-mpvi-local-video-handler)
            path target beg end)
   (message "Save to %s done." (propertize target 'face 'font-lock-keyword-face)))
