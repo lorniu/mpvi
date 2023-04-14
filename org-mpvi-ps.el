@@ -40,9 +40,11 @@ If CONFIRM not nil then prompt user the options."
     (when confirm
       (setq options (read-string "Confirm options for danmaku2ass: " options)))
     (with-temp-buffer
-      (apply #'call-process "danmaku2ass" nil (current-buffer)
-             nil danmaku-file (split-string-shell-command options))
-      (org-mpvi-log "Convert danmaku to ass format: danmaku2ass -o %s %s" dest options)
+      (org-mpvi-log "Convert danmaku to ass format for %s" danmaku-file)
+      (apply #'org-mpvi-call-process
+             "danmaku2ass"
+             (file-truename danmaku-file)
+             (split-string-shell-command options))
       (if (file-exists-p dest)
           (prog1 dest
             (when (called-interactively-p 'any)
@@ -55,22 +57,21 @@ If CONFIRM not nil then prompt user the options."
 PLATFORM can be bili, douyu and so on, see `https://github.com/Borber/seam' for detail."
   (unless (executable-find "seam")
     (user-error "You should have `seam' in path to extract url (https://github.com/Borber/seam)"))
-  (let ((command (format "seam %s %s" platform rid)))
-    (org-mpvi-log "Get living url: %s" platform command)
-    (with-temp-buffer
-      (shell-command command (current-buffer))
-      (goto-char (point-max))
-      (skip-chars-backward " \t\n")
-      (backward-sexp)
-      (let* ((json (ignore-errors (json-read)))
-             (title (alist-get 'title json))
-             (nodes (mapcar (lambda (n) (alist-get 'url n)) (alist-get 'nodes json))))
-        (if (> (length nodes) 0)
-            (let ((path (if (= (length nodes) 1) (car nodes)
-                          (completing-read "Choose living source: " nodes nil t))))
-              (prog1 (list path title) ; return path and title
-                (org-mpvi-log "Live url: %s" path)))
-          (user-error "Error when get url for %s/%s: %s" platform rid (string-trim (buffer-string))))))))
+  (with-temp-buffer
+    (org-mpvi-log "Get living url with seam for %s:%s" platform rid)
+    (apply #'org-mpvi-call-process "seam" platform rid)
+    (goto-char (point-max))
+    (skip-chars-backward " \t\n")
+    (backward-sexp)
+    (let* ((json (ignore-errors (json-read)))
+           (title (alist-get 'title json))
+           (nodes (mapcar (lambda (n) (alist-get 'url n)) (alist-get 'nodes json))))
+      (if (> (length nodes) 0)
+          (let ((path (if (= (length nodes) 1) (car nodes)
+                        (completing-read "Choose living source: " nodes nil t))))
+            (prog1 (list path title) ; return path and title
+              (org-mpvi-log "Live url: %s" path)))
+        (user-error "Error when get url for %s/%s: %s" platform rid (string-trim (buffer-string)))))))
 
 
 ;;; Bilibili

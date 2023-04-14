@@ -71,6 +71,12 @@ FMT and ARGS are like arguments in `message'."
   (when org-mpvi-enable-debug
     (apply #'message (concat "[org-mpvi] " fmt) args)))
 
+(defun org-mpvi-call-process (program &rest args)
+  "Helper for `call-process', PROGRAM and ARGS are the same."
+  (org-mpvi-log ">>> %s %s" program
+                (mapconcat (lambda (a) (shell-quote-argument a)) args " "))
+  (apply #'call-process program nil t nil args))
+
 (defun org-mpvi-bark-if-not-live ()
   "Check if mpv is runing."
   (unless (and (mpv-live-p) (ignore-errors (mpv-get-property "time-pos")))
@@ -313,7 +319,9 @@ When PATH is nil then return the path of current playing video."
       (let ((mpv-default-options (append opts org-mpvi-extra-mpv-args))
             (mpv-on-start-hook (cons hook mpv-on-start-hook)))
         (format "Waiting %s..." path)
-        (org-mpvi-log "MPV start extra options: %s" mpv-default-options)
+        (org-mpvi-log "MPV start extra options: %s"
+                      (mapconcat (lambda (a) (shell-quote-argument a))
+                                 mpv-default-options " "))
         (apply #'org-mpvi-start path (format "--start=+%s" beg)
                (if end (list (format "--ab-loop-a=%s" beg)
                              (format "--ab-loop-b=%s" end))))
@@ -363,10 +371,10 @@ it is nil pass \"video\" as default, else prompt user to choose one."
   (unless (executable-find "tesseract")
     (user-error "Program 'tesseract' not found"))
   (with-temp-buffer
-    (if (zerop (apply #'call-process "tesseract"  nil t nil file "stdout"
+    (if (zerop (apply #'org-mpvi-call-process "tesseract" file "stdout"
                       (if org-mpvi-tesseract-args (split-string-shell-command org-mpvi-tesseract-args))))
         (buffer-string)
-      (user-error "OCR tesseract failed: %S" (string-trim (buffer-string))))))
+      (user-error "OCR tesseract failed: %s" (string-trim (buffer-string))))))
 
 (defcustom org-mpvi-ffmpeg-extra-args nil
   "Extra options pass to 'ffmpeg'."
@@ -402,11 +410,11 @@ OPTS is a string, pass to 'ffmpeg' when it is not nil."
       (user-error "Output file %s is already exist!" target))
     (make-directory (file-name-directory target) t) ; ensure directory
     (with-temp-buffer
-      (org-mpvi-log "Convert command: %s" command)
-      (shell-command command (current-buffer))
+      (org-mpvi-log "Convert file %s" file)
+      (apply #'org-mpvi-call-process (split-string-shell-command command))
       (if (file-exists-p target)
           (prog1 target (kill-new target))
-        (user-error "Convert with ffmpeg failed: %S" (string-trim (buffer-string)))))))
+        (user-error "Convert with ffmpeg failed: %s" (string-trim (buffer-string)))))))
 
 (defcustom org-mpvi-ytdlp-extra-args nil
   "The default extra options pass to 'yt-dlp'."
@@ -432,35 +440,35 @@ OPTS is a string, pass to 'yt-dlp' when it is not nil."
                      (read-string
                       "Confirm: "
                       (concat (propertize (concat "yt-dlp " url) 'face 'font-lock-constant-face 'read-only t)
-                              (if (or beg end) " --downloader ffmpeg --downloader-args 'ffmpeg_i:")
-                              beg end (if (or beg end) "'")
+                              (if (or beg end) " --downloader ffmpeg --downloader-args \"ffmpeg_i:")
+                              beg end (if (or beg end) "\"") extra
                               " -o " target)))))
          (target (cl-subseq command (+ 1 (cl-position ?  command :from-end t)))))
     (when (file-exists-p target)
       (user-error "Output file %s is already exist!" target))
     (make-directory (file-name-directory target) t) ; ensure directory
     (with-temp-buffer
-      (org-mpvi-log "Download/Clip command: %s" command)
-      (shell-command command (current-buffer))
+      (org-mpvi-log "Download/Clip url %s" url)
+      (apply #'org-mpvi-call-process (split-string-shell-command command))
       (if (file-exists-p target)
           (prog1 target (kill-new target))
-        (user-error "Download and clip yt-dlp/ffmpeg failed: %S" (string-trim (buffer-string)))))))
+        (user-error "Download and clip with yt-dlp/ffmpeg failed: %s" (string-trim (buffer-string)))))))
 
 (defun org-mpvi-ytdlp-download-subtitle (url &optional prefix opts)
   "Download subtitle for URL and save as file named begin with PREFIX.
 Pass OPTS to 'yt-dlp' when it is not nil."
   (unless (executable-find "yt-dlp")
     (user-error "Program 'yt-dlp' should be installed"))
-  (let ((command (concat "yt-dlp '" url "' --write-subs --skip-download -o '"
-                         (or prefix (expand-file-name "SUB-%(fulltitle)s" org-mpvi-cache-directory)) "' "
-                         (or opts org-mpvi-ytdlp-extra-args))))
-    (org-mpvi-log "Downloading subtitle: %s" command)
-    (with-temp-buffer
-      (shell-command command (current-buffer))
-      (goto-char (point-min))
-      (if (re-search-forward "Destination:\\(.*\\)$" nil t)
-          (string-trim (match-string 1))
-        (user-error "Error when download subtitle: %S" (string-trim (buffer-string)))))))
+  (with-temp-buffer
+    (org-mpvi-log "Downloading subtitle for %s" url)
+    (apply #'org-mpvi-call-process
+           "yt-dlp" url "--write-subs" "--skip-download"
+           "-o" (or prefix (expand-file-name "SUB-%(fulltitle)s" org-mpvi-cache-directory))
+           (split-string-shell-command (or opts org-mpvi-ytdlp-extra-args "")))
+    (goto-char (point-min))
+    (if (re-search-forward "Destination:\\(.*\\)$" nil t)
+        (string-trim (match-string 1))
+      (user-error "Error when download subtitle: %s" (string-trim (buffer-string))))))
 
 (defun org-mpvi-ytdlp-url-metadata (url &optional opts)
   "Return metadata for URL, pass extra OPTS to `yt-dlp' for querying.
@@ -474,14 +482,15 @@ playlist item with light request. This should be improved someday."
     (condition-case err
         (progn
           (org-mpvi-log "Request matadata for %s" url)
-          (apply #'call-process "yt-dlp" nil (current-buffer) nil
-                 url "-J" "--flat-playlist" opts)
+          (apply #'org-mpvi-call-process
+                 "yt-dlp" url "-J" "--flat-playlist"
+                 (split-string-shell-command (or opts org-mpvi-ytdlp-extra-args "")))
           (goto-char (point-min))
           (let* ((json (json-read))
                  (playlistp (equal "playlist" (alist-get '_type json))))
             (if playlistp (nconc json (list '(is_playlist . t))))
             json))
-    (error (user-error "Error when get metadata for %s: %S" url (string-trim (buffer-string)))))))
+      (error (user-error "Error when get metadata for %s: %s" url (string-trim (buffer-string)))))))
 
 (defun org-mpvi-ytdlp-output-field (url field &optional opts)
   "Get FIELD information for video URL.
@@ -489,14 +498,15 @@ FIELD can be id/title/urls/description/format/thumbnail/formats_table and so on.
 Pass extra OPTS to mpv if it is not nil."
   (unless (executable-find "yt-dlp")
     (user-error "Program 'yt-dlp' should be installed"))
-  (let ((command (concat "yt-dlp \"" url "\" " (or opts org-mpvi-ytdlp-extra-args) " --print \"" field "\"")))
-    (org-mpvi-log "yt-dlp output template: %s" command)
-    (with-temp-buffer
-      (shell-command command (current-buffer))
-      (goto-char (point-min))
-      (if (re-search-forward "^yt-dlp: error:.*$" nil t)
-          (user-error "Error to get `yt-dlp' template/%s: %S" field (match-string 0))
-        (string-trim (buffer-string))))))
+  (with-temp-buffer
+    (org-mpvi-log "yt-dlp output template for %s of %s" field url)
+    (apply #'org-mpvi-call-process
+           "yt-dlp" url "--print" field
+           (split-string-shell-command (or opts org-mpvi-ytdlp-extra-args "")))
+    (goto-char (point-min))
+    (if (re-search-forward "^yt-dlp: error:.*$" nil t)
+        (user-error "Error to get `yt-dlp' template/%s: %s" field (match-string 0))
+      (string-trim (buffer-string)))))
 
 
 ;;; Patch 'mpv.el' for Windows
