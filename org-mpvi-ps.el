@@ -25,7 +25,7 @@
 
 (require 'json)
 
-(defvar org-mpvi-danmaku2ass-args "--protect 80  -ds 5.0  -dm 10.0  --font 'Lantinghei SC'  --fontsize 37.0  --alpha 0.8  --size 960x768")
+(defvar org-mpvi-danmaku2ass-args "--protect 80  -ds 5.0  -dm 10.0  --font \"Lantinghei SC\"  --fontsize 37.0  --alpha 0.8  --size 960x768")
 
 (defun org-mpvi-convert-danmaku2ass (danmaku-file &optional confirm)
   "Convert DANMAKU-FILE to ASS format.
@@ -44,7 +44,7 @@ If CONFIRM not nil then prompt user the options."
       (apply #'org-mpvi-call-process
              "danmaku2ass"
              (file-truename danmaku-file)
-             (split-string-shell-command options))
+             (split-string-and-unquote options))
       (if (file-exists-p dest)
           (prog1 dest
             (when (called-interactively-p 'any)
@@ -58,8 +58,8 @@ PLATFORM can be bili, douyu and so on, see `https://github.com/Borber/seam' for 
   (unless (executable-find "seam")
     (user-error "You should have `seam' in path to extract url (https://github.com/Borber/seam)"))
   (with-temp-buffer
-    (org-mpvi-log "Get living url with seam for %s:%s" platform rid)
-    (apply #'org-mpvi-call-process "seam" platform rid)
+    (org-mpvi-log "Get living url with seam for %s: %s" platform rid)
+    (org-mpvi-call-process "seam" (format "%s" platform) rid)
     (goto-char (point-max))
     (skip-chars-backward " \t\n")
     (backward-sexp)

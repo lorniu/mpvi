@@ -50,10 +50,11 @@ winget install mpv yt-dlp ffmpeg Tesseract-OCR
 - `i` 在 buffer 中插入时间戳链接
 - `Space` 切换暂停与播放
 - `j/k/l` 调整播放速度
-- `n/p/N/P/M-n/M-p` 等实现各种维度的播放进度调整
+- `n/p/N/P/M-n/M-p/C-l` 等实现各种维度的播放进度调整
 - `s/C-s/C-i` 等实现各种方式的截图
 - `r/C-r` 对当前播放页面进行 OCR 识别并复制结果
 - `t/C-t` 复制当前页面的字幕或弹幕
+- `c/C-c` 下载、裁剪、转码当前播放视频
 - `v/C-v` 切换网络视频 playlist/category 里的视频
 - `o/C-o` 切换到系统默认程序 (比如浏览器) 打开当前播放视频
 - `q/C-q` 退出 minibuffer
@@ -64,7 +65,7 @@ winget install mpv yt-dlp ffmpeg Tesseract-OCR
 - `, a` 更改链接中视频的开始时间
 - `, b` 更改链接中视频的结束时间
 - `, v` 预览链接中视频时间戳位置的画面
-- `, c` 视频的下载、转码、截取。All In One, 很好用
+- `, c` 视频的下载、转码、截取。**All In One**, 很好用
 
 其他补充:
 - 支持视频分 P 播放。比如，可以直接用 `org-mpvi-open` 打开 B 站播放列表 url 或专栏合集 url

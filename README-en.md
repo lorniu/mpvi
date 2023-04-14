@@ -44,10 +44,11 @@ Command `org-mpvi-seek` is the most frequently used one. It integrates many func
 - `i` Insert timestamp link into current buffer
 - `Space` Toggle play and pause
 - `j/k/l` Change the playback speed
-- `n/p/N/P/M-n/M-p` Seek to any position smartly
+- `n/p/N/P/M-n/M-p/C-l` Seek to any position smartly
 - `s/C-s/C-i` Multiple ways to take screenshots
 - `r/C-r` OCR recognition of the current playback screen
 - `t/C-t` Copy subtitle of the current playback screen
+- `c/C-c` Download/clip/transcode current playing video
 - `v/C-v` Switch playlist/category
 - `o/C-o` Switch to system program (for example, browser) to continue the playing
 - `q/C-q` quit minibuffer

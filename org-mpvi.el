@@ -51,6 +51,10 @@
   "Used to save temporary files."
   :type 'directory)
 
+(defvar org-mpvi-last-save-directory nil)
+
+(defvar org-mpvi-play-history nil)
+
 (defvar org-mpvi-build-link-function #'org-mpvi-build-mpv-link)
 
 (defvar org-mpvi-screenshot-function #'org-mpvi-screenshot)
@@ -60,8 +64,6 @@
 (defvar org-mpvi-local-video-handler #'org-mpvi-convert-by-ffmpeg)
 
 (defvar org-mpvi-remote-video-handler #'org-mpvi-ytdlp-download)
-
-(defvar org-mpvi-play-history nil)
 
 (defvar org-mpvi-annotation-face '(:inherit completions-annotations))
 
@@ -158,7 +160,8 @@ I don't know whether better solutions exist."
 (defun org-mpvi-read-file-name (prompt default-name)
   "Read file name using a PROMPT minibuffer.
 DEFAULT-NAME is used when only get a directory name."
-  (let ((target (read-file-name prompt)))
+  (let* ((default-directory org-mpvi-last-save-directory)
+         (target (read-file-name prompt)))
     (if (directory-name-p target)
         (expand-file-name (file-name-nondirectory default-name) target)
       (expand-file-name target))))
@@ -209,7 +212,7 @@ DESC is optional, used to describe the current timestamp link."
 (defun org-mpvi-parse-link-at-point ()
   "Return the mpv link object at point."
   (unless (derived-mode-p 'org-mode)
-    (user-error "You must parse MPV link in org mode."))
+    (user-error "You must parse MPV link in org mode"))
   (let ((node (cadr (org-element-context))))
     (when (equal "mpv" (plist-get node :type))
       (let ((meta (org-mpvi-parse-link (plist-get node :path)))
@@ -392,28 +395,34 @@ OPTS is a string, pass to 'ffmpeg' when it is not nil."
          (extra (if (or opts org-mpvi-ffmpeg-extra-args)
                     (concat " " (string-trim (or opts org-mpvi-ffmpeg-extra-args)))
                   ""))
-         (target (if target (expand-file-name target)
-                   (expand-file-name (format-time-string "clip-file-%s.mp4") org-mpvi-cache-directory)))
+         (target (expand-file-name
+                  (or target (format-time-string "mpv-video-%s.mp4"))
+                  org-mpvi-last-save-directory))
          (command (string-trim
-                   (minibuffer-with-setup-hook
-                       (lambda () (if (search-backward " " nil t) (forward-char)))
-                     (read-string
-                      "Confirm: "
-                      (concat (propertize
-                               (concat "ffmpeg"
-                                       (propertize " -loglevel error" 'invisible t)
-                                       (format " -i %s -c copy" (expand-file-name file)))
-                               'face 'font-lock-constant-face 'read-only t)
-                              (format "%s%s%s %s" extra beg end target))))))
-         (target (cl-subseq command (+ 1 (cl-position ?  command :from-end t)))))
+                   (read-string
+                    "Confirm: "
+                    (concat (propertize
+                             (concat "ffmpeg"
+                                     (propertize " -loglevel error" 'invisible t)
+                                     (format " -i %s" (expand-file-name file)))
+                             'face 'font-lock-constant-face 'read-only t)
+                            " -c copy" extra beg end (format " \"%s\"" target)))))
+         (target (with-temp-buffer
+                   (insert (string-trim command))
+                   (let ((quote (if (member (char-before) '(?' ?\")) (char-before))))
+                     (re-search-backward (if quote (format " +%c" quote) " +") nil t)
+                     (buffer-substring (match-end 0) (if quote (- (point-max) 1) (point-max)))))))
     (when (file-exists-p target)
       (user-error "Output file %s is already exist!" target))
     (make-directory (file-name-directory target) t) ; ensure directory
+    (setq org-mpvi-last-save-directory (file-name-directory target)) ; record the dir
     (with-temp-buffer
       (org-mpvi-log "Convert file %s" file)
-      (apply #'org-mpvi-call-process (split-string-shell-command command))
+      (apply #'org-mpvi-call-process (split-string-and-unquote command))
       (if (file-exists-p target)
-          (prog1 target (kill-new target))
+          (prog1 target
+            (kill-new target)
+            (message "Save to %s done." (propertize target 'face 'font-lock-keyword-face)))
         (user-error "Convert with ffmpeg failed: %s" (string-trim (buffer-string)))))))
 
 (defcustom org-mpvi-ytdlp-extra-args nil
@@ -426,32 +435,49 @@ OPTS is a string, pass to 'yt-dlp' when it is not nil."
   (cl-assert (mpv--url-p url))
   (unless (and (executable-find "yt-dlp") (executable-find "ffmpeg"))
     (user-error "Programs 'yt-dlp' and 'ffmpeg' should be installed"))
-  (let* ((beg (if (numberp beg) (format " -ss %s" beg) ""))
-         (end (if (numberp end) (format " -to %s" end) ""))
+  (let* ((fmt (org-mpvi-ytdlp-pick-format url))
+         (beg (if (numberp beg) (format " -ss %s" beg)))
+         (end (if (numberp end) (format " -to %s" end)))
          (extra (if (or opts org-mpvi-ytdlp-extra-args)
                     (concat " " (string-trim (or opts org-mpvi-ytdlp-extra-args)))
                   ""))
-         (target (if target
-                     (expand-file-name target)
-                   (expand-file-name (format-time-string "clip-url-%s.mp4") org-mpvi-cache-directory)))
+         (target (expand-file-name (or target (car fmt)) org-mpvi-last-save-directory))
          (command (string-trim
                    (minibuffer-with-setup-hook
-                       (lambda () (if (search-backward " " nil t) (forward-char)))
+                       (lambda ()
+                         (backward-char)
+                         (use-local-map (make-composed-keymap nil (current-local-map)))
+                         (local-set-key (kbd "<return>")
+                                        (lambda ()
+                                          (interactive)
+                                          (let ((cmd (minibuffer-contents)))
+                                            (with-temp-buffer
+                                              (insert cmd)
+                                              (goto-char (point-min))
+                                              (when (re-search-forward " -o +['\"]?\\([^'\"]+\\)" nil t)
+                                                (setq target (match-string 1)))
+                                              (if (file-exists-p target)
+                                                  (message
+                                                   (propertize
+                                                    (format "Output file %s is already exist!" target)
+                                                    'face 'font-lock-warning-face))
+                                                (exit-minibuffer)))))))
                      (read-string
                       "Confirm: "
                       (concat (propertize (concat "yt-dlp " url) 'face 'font-lock-constant-face 'read-only t)
+                              " -f \"" (cdr fmt) "\""
                               (if (or beg end) " --downloader ffmpeg --downloader-args \"ffmpeg_i:")
                               beg end (if (or beg end) "\"") extra
-                              " -o " target)))))
-         (target (cl-subseq command (+ 1 (cl-position ?  command :from-end t)))))
-    (when (file-exists-p target)
-      (user-error "Output file %s is already exist!" target))
+                              " -o \"" target "\""))))))
     (make-directory (file-name-directory target) t) ; ensure directory
+    (setq org-mpvi-last-save-directory (file-name-directory target)) ; record the dir
     (with-temp-buffer
       (org-mpvi-log "Download/Clip url %s" url)
       (apply #'org-mpvi-call-process (split-string-shell-command command))
       (if (file-exists-p target)
-          (prog1 target (kill-new target))
+          (prog1 target
+            (kill-new target)
+            (message "Save to %s done." (propertize target 'face 'font-lock-keyword-face)))
         (user-error "Download and clip with yt-dlp/ffmpeg failed: %s" (string-trim (buffer-string)))))))
 
 (defun org-mpvi-ytdlp-download-subtitle (url &optional prefix opts)
@@ -469,6 +495,44 @@ Pass OPTS to 'yt-dlp' when it is not nil."
     (if (re-search-forward "Destination:\\(.*\\)$" nil t)
         (string-trim (match-string 1))
       (user-error "Error when download subtitle: %s" (string-trim (buffer-string))))))
+
+(defun org-mpvi-ytdlp-pick-format (url)
+  "Completing read the formats for video with URL.
+Return (suggestion-save-name . video-format)."
+  (unless (executable-find "yt-dlp")
+    (user-error "Program 'yt-dlp' should be installed"))
+  (with-temp-buffer
+    (org-mpvi-call-process "yt-dlp" "-F" url)
+    (goto-char (point-min))
+    (unless (re-search-forward "Available formats for \\(.+\\):" nil t)
+      (user-error "Nothing found: %s" (string-trim (buffer-string))))
+    (let* ((name (if (equal (mpv-get-property "path") url)
+                     (mpv-get-property "media-title")
+                   (match-string 1)))
+           (fmts (cl-loop with text = (string-trim (buffer-substring
+                                                    (progn (search-forward "-\n" nil t) (point))
+                                                    (point-max)))
+                          for item in (split-string text "\n")
+                          collect (cons (concat (propertize ">  " 'face 'font-lock-keyword-face) item)
+                                        (split-string item " +"))))
+           (format (string-trim
+                    (completing-read
+                     "Format (choose directly for one, input like '1,4' for multiple. Default: 'bv,ba'): "
+                     (lambda (input pred action)
+                       (pcase action
+                         ('metadata
+                          `(metadata (display-sort-function . ,#'identity)))
+                         (`(boundaries . ,suffix)
+                          `(boundaries . ,(cons (length input) 0)))
+                         (_ (complete-with-action action fmts "" nil))))
+                     nil nil nil nil "bv,ba")))
+           (format (if (string-prefix-p ">" format)
+                       (cadr (assoc format fmts))
+                     (string-trim (cl-subseq format 0 (cl-position ?\> format)))))
+           (ext (if-let ((fmt (cl-find-if (lambda (c) (equal (cadr c) format)) fmts)))
+                    (caddr fmt) "mp4")))
+      (setq format (string-replace " " "" (string-replace "," "+" format)))
+      (cons (concat name "_" format "." ext) format))))
 
 (defun org-mpvi-ytdlp-url-metadata (url &optional opts)
   "Return metadata for URL, pass extra OPTS to `yt-dlp' for querying.
@@ -516,7 +580,7 @@ Pass extra OPTS to mpv if it is not nil."
 This is just `mpv-start' that with windows support."
   (mpv-kill)
   (let ((pipe (make-temp-name "mpv-")))
-    (unless (equal system-type 'windows-nt)
+    (unless (eq system-type 'windows-nt)
       (setq pipe (expand-file-name pipe temporary-file-directory)))
     (setq mpv--process
           (apply #'start-process "mpv-player" nil mpv-executable
@@ -543,12 +607,12 @@ PIPENAME should be name of pipe on Windows or socket file on others."
   (with-timeout (mpv-start-timeout
                  (mpv-kill)
                  (error "Failed to connect to MPV"))
-    (while (not (if (equal system-type 'windows-nt)
+    (while (not (if (eq system-type 'windows-nt)
                     (org-mpvi-named-pipe-exists-p pipename)
                   (file-exists-p pipename)))
       (sleep-for 0.05)))
   (setq mpv--queue (tq-create
-                    (if (equal system-type 'windows-nt)
+                    (if (eq system-type 'windows-nt)
                         (org-mpvi-make-named-pipe-client-process pipename)
                       (make-network-process :name "mpv-socket"
                                             :family 'local
@@ -560,7 +624,7 @@ PIPENAME should be name of pipe on Windows or socket file on others."
                             (with-current-buffer buffer
                               (goto-char (point-max))
                               (insert string)
-                              (when (equal system-type 'windows-nt)
+                              (when (eq system-type 'windows-nt)
                                 (goto-char (point-min))
                                 ;; when find error raised by powershell
                                 (skip-chars-forward " \n\r\t")
@@ -641,7 +705,10 @@ type `C-x b' to choose video path from `org-mpvi-favor-paths'."
         (setq path
               (or (plist-get (org-mpvi-extract-url nil path :urlonly t) :url) path)))
       (mpv--playlist-append path))
-     (t (user-error "Unknown action")))))
+     ((equal act 'dup)
+      (if (mpv--url-p path)
+          (org-mpvi-ytdlp-download path)
+        (org-mpvi-convert-by-ffmpeg path))))))
 
 (defcustom org-mpvi-favor-paths nil
   "Your favor video path list.
@@ -681,6 +748,7 @@ This can be used by `org-mpvi-open-from-favors' to quick open video."
     (set-keymap-parent map minibuffer-local-map)
     (define-key map (kbd "C-x b") #'org-mpvi-open-from-favors)
     (define-key map (kbd "C-x <return>") (lambda () (interactive) (throw 'org-mpvi-open (list (minibuffer-contents) 'add))))
+    (define-key map (kbd "C-x C-w") (lambda () (interactive) (throw 'org-mpvi-open (list (minibuffer-contents) 'dup))))
     map))
 
 ;;;###autoload
@@ -859,6 +927,13 @@ If NUM is not nil, go back that position first."
         (org-mpvi-set-pause paused))))
   (org-mpvi-seek-revert))
 
+(defun org-mpvi-seek-clip ()
+  "Download/Clip current playing video."
+  (interactive)
+  (let ((path (mpv-get-property "path")))
+    (funcall (if (mpv--url-p path) org-mpvi-remote-video-handler org-mpvi-local-video-handler) path))
+  (throw 'org-mpvi-seek nil))
+
 (defun org-mpvi-seek-copy-sub-text ()
   "Copy current sub text to kill ring."
   (interactive)
@@ -963,6 +1038,8 @@ If any, prompt user to choose one video in playlist to play."
     (define-key map (kbd ">")   #'mpv-chapter-next)
     (define-key map (kbd "v")   #'org-mpvi-current-playing-switch-playlist)
     (define-key map (kbd "C-v") #'org-mpvi-current-playing-switch-playlist)
+    (define-key map (kbd "c")   #'org-mpvi-seek-clip)
+    (define-key map (kbd "C-c") #'org-mpvi-seek-clip)
     (define-key map (kbd "s")   #'org-mpvi-seek-capture-save-as)
     (define-key map (kbd "C-s") #'org-mpvi-seek-capture-to-clipboard)
     (define-key map (kbd "C-i") #'org-mpvi-seek-capture-as-attach)
@@ -979,20 +1056,20 @@ If any, prompt user to choose one video in playlist to play."
     map))
 
 ;;;###autoload
-(defun org-mpvi-clip (path &optional target beg end)
+(defun org-mpvi-current-link-clip (path &optional target beg end)
   "Cut or convert video for PATH from BEG to END, save to TARGET.
 Default handle current video at point."
   (interactive
    (if-let ((node (org-mpvi-parse-link-at-point)))
        (let ((path (plist-get node :path)))
          (if (or (mpv--url-p path) (file-exists-p path))
-             (list path (org-mpvi-read-file-name "Save to: " path)
+             (list path
+                   (unless (mpv--url-p path) (org-mpvi-read-file-name "Save to: " path))
                    (plist-get node :vbeg) (plist-get node :vend))
            (user-error "File not found: %s" path)))
      (user-error "No MPV link found at point")))
   (funcall (if (mpv--url-p path) org-mpvi-remote-video-handler org-mpvi-local-video-handler)
-           path target beg end)
-  (message "Save to %s done." (propertize target 'face 'font-lock-keyword-face)))
+           path target beg end))
 
 (defun org-mpvi-current-link-seek ()
   "Seek position for this link."
@@ -1035,7 +1112,7 @@ Default handle current video at point."
     (define-key map (kbd ", a")   #'org-mpvi-insert)
     (define-key map (kbd ", b")   #'org-mpvi-current-link-update-end-pos)
     (define-key map (kbd ", v")   #'org-mpvi-current-link-show-preview)
-    (define-key map (kbd ", c")   #'org-mpvi-clip)
+    (define-key map (kbd ", c")   #'org-mpvi-current-link-clip)
     (define-key map (kbd ", ,")   #'org-open-at-point)
     (define-key map (kbd ", SPC") #'mpv-pause)
     map))
