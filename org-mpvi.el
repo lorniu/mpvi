@@ -383,6 +383,10 @@ it is nil pass \"video\" as default, else prompt user to choose one."
   "Extra options pass to 'ffmpeg'."
   :type 'string)
 
+(defcustom org-mpvi-ffmpeg-gif-filter "fps=10,crop=iw:ih:0:0,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"
+  "Filter used when use 'ffmpeg' to convert to gif file."
+  :type 'string)
+
 (defun org-mpvi-convert-by-ffmpeg (file &optional target beg end opts)
   "Convert local video FILE from BEG to END using ffmpeg, output to TARGET.
 This can be used to cut/resize/reformat and so on.
@@ -392,28 +396,45 @@ OPTS is a string, pass to 'ffmpeg' when it is not nil."
     (user-error "Program 'ffmpeg' not found"))
   (let* ((beg (if (numberp beg) (format " -ss %s" beg) ""))
          (end (if (numberp end) (format " -to %s" end) ""))
-         (extra (if (or opts org-mpvi-ffmpeg-extra-args)
-                    (concat " " (string-trim (or opts org-mpvi-ffmpeg-extra-args)))
-                  ""))
          (target (expand-file-name
                   (or target (format-time-string "mpv-video-%s.mp4"))
                   org-mpvi-last-save-directory))
+         (extra (concat (if (member (file-name-extension target) '("gif" "webp"))
+                            (format " -vf \"%s\" -loop 0" org-mpvi-ffmpeg-gif-filter)
+                          " -c copy")
+                        (if (or opts org-mpvi-ffmpeg-extra-args)
+                            (concat " " (string-trim (or opts org-mpvi-ffmpeg-extra-args))))))
          (command (string-trim
-                   (read-string
-                    "Confirm: "
-                    (concat (propertize
-                             (concat "ffmpeg"
-                                     (propertize " -loglevel error" 'invisible t)
-                                     (format " -i %s" (expand-file-name file)))
-                             'face 'font-lock-constant-face 'read-only t)
-                            " -c copy" extra beg end (format " \"%s\"" target)))))
-         (target (with-temp-buffer
-                   (insert (string-trim command))
-                   (let ((quote (if (member (char-before) '(?' ?\")) (char-before))))
-                     (re-search-backward (if quote (format " +%c" quote) " +") nil t)
-                     (buffer-substring (match-end 0) (if quote (- (point-max) 1) (point-max)))))))
-    (when (file-exists-p target)
-      (user-error "Output file %s is already exist!" target))
+                   (minibuffer-with-setup-hook
+                       (lambda ()
+                         (use-local-map (make-composed-keymap nil (current-local-map)))
+                         (local-set-key (kbd "C-x C-q")
+                                        (lambda ()
+                                          (interactive)
+                                          (let ((inhibit-read-only t))
+                                            (set-text-properties (minibuffer-prompt-end) (point-max) nil))))
+                         (local-set-key (kbd "<return>")
+                                        (lambda ()
+                                          (interactive)
+                                          (let ((cmd (minibuffer-contents)))
+                                            (with-temp-buffer
+                                              (insert (string-trim cmd))
+                                              (let ((quote (if (member (char-before) '(?' ?\")) (char-before))))
+                                                (when (re-search-backward (if quote (format " +%c" quote) " +") nil t)
+                                                  (setq target (buffer-substring (match-end 0) (if quote (- (point-max) 1) (point-max)))))))
+                                            (if (file-exists-p target)
+                                                (message
+                                                 (propertize
+                                                  (format "Output file %s is already exist!" target)
+                                                  'face 'font-lock-warning-face))
+                                              (exit-minibuffer))))))
+                     (read-string "Confirm: "
+                                  (concat (propertize
+                                           (concat "ffmpeg"
+                                                   (propertize " -loglevel error" 'invisible t)
+                                                   (format " -i %s" (expand-file-name file)))
+                                           'face 'font-lock-constant-face 'read-only t)
+                                          beg end extra (format " \"%s\"" target)))))))
     (make-directory (file-name-directory target) t) ; ensure directory
     (setq org-mpvi-last-save-directory (file-name-directory target)) ; record the dir
     (with-temp-buffer
