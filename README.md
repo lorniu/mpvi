@@ -28,6 +28,7 @@ Knock knock, [English Help](README-en.md).
 - [tesseract](https://github.com/tesseract-ocr/tesseract)，如果需要文字识别 (OCR) 功能才安装
 - [danmaku2ass](https://github.com/m13253/danmaku2ass)，安装这个后，看 B 站视频就有弹幕啦
 - [seam](https://github.com/Borber/seam)，用来解析直播链接，要看直播的需要安装
+- [EMMS](https://www.gnu.org/software/emms/)，可以使用 EMMS 对视频进行管理，配合本包使用非常方便
 
 对于 Arch Linux 用户，一键安装依赖:
 ```sh

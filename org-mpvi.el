@@ -55,6 +55,8 @@
 
 (defvar org-mpvi-play-history nil)
 
+(defvar org-mpvi-emms-player nil)
+
 (defvar org-mpvi-build-link-function #'org-mpvi-build-mpv-link)
 
 (defvar org-mpvi-screenshot-function #'org-mpvi-screenshot)
@@ -721,11 +723,12 @@ type `C-x b' to choose video path from `org-mpvi-favor-paths'."
       (setq org-mpvi-current-url-metadata nil)
       (org-mpvi-play path))
      ((equal act 'add)
-      (org-mpvi-bark-if-not-live)
       (when (mpv--url-p path)
-        (setq path
-              (or (plist-get (org-mpvi-extract-url nil path :urlonly t) :url) path)))
-      (mpv--playlist-append path))
+        (setq path (or (plist-get (org-mpvi-extract-url nil path :urlonly t) :url) path)))
+      (if org-mpvi-emms-player ; add to EMMS playlist
+          (if (mpv--url-p path) (emms-add-url path) (emms-add-file path))
+        (org-mpvi-bark-if-not-live)
+        (mpv--playlist-append path)))
      ((equal act 'dup)
       (if (mpv--url-p path)
           (org-mpvi-ytdlp-download path)
@@ -1120,6 +1123,57 @@ Default handle current video at point."
            (help (propertize " " 'display img))
            (x-gtk-use-system-tooltips nil))
       (tooltip-show help))))
+
+
+;;; Integrate with EMMS
+
+(defcustom org-mpvi-enable-emms (or (featurep 'emms) (featurep 'emms-autoloads))
+  "Wheather integrate with `emms'."
+  :type 'boolean)
+
+;;;###autoload
+(defun org-mpvi-emms-init ()
+  "Integrate with EMMS."
+  (interactive)
+  (unless (require 'emms nil t)
+    (user-error "You should have `emms' installed to integrate with it"))
+  (if current-prefix-arg ; disable integration if called with C-u
+      (setq emms-player-list (delq 'org-mpvi-emms-player emms-player-list))
+    (setq org-mpvi-emms-player
+          (emms-player #'org-mpvi-emms-start
+                       #'org-mpvi-emms-stop
+                       #'org-mpvi-emms-playable-p))
+    (emms-player-set org-mpvi-emms-player 'pause #'org-mpvi-emms-pause)
+    (emms-player-set org-mpvi-emms-player 'resume #'org-mpvi-emms-resume)
+    (emms-player-set org-mpvi-emms-player 'seek #'org-mpvi-seek-walk)
+    (emms-player-set org-mpvi-emms-player 'seek-to #'org-mpvi-seek-walk)
+    (add-to-list #'emms-player-list 'org-mpvi-emms-player)))
+
+(defun org-mpvi-emms-playable-p (track)
+  (memq (emms-track-get track 'type) '(file url)))
+
+(defun org-mpvi-emms-start (track)
+  (mpv-kill)
+  (setq emms-player-stopped-p nil)
+  (let ((name (emms-track-get track 'name)))
+    (message "Starting %s..." name)
+    (org-mpvi-play name)
+    (emms-player-started org-mpvi-emms-player)))
+
+(defun org-mpvi-emms-stop ()
+  (setq emms-player-stopped-p t)
+  (mpv-kill)
+  (emms-player-stopped))
+
+(defun org-mpvi-emms-pause ()
+  (org-mpvi-set-pause t)
+  (setq emms-player-paused-p t))
+
+(defun org-mpvi-emms-resume ()
+  (org-mpvi-set-pause :json-false)
+  (setq emms-player-paused-p nil))
+
+(if org-mpvi-enable-emms (org-mpvi-emms-init))
 
 
 ;;; Integrate with Org Link

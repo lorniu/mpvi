@@ -22,6 +22,7 @@ I just wrote this for fun. Now release it for the ones who need it.
   + [tesseract](https://github.com/tesseract-ocr/tesseract), used to OCR
   + [danmaku2ass](https://github.com/m13253/danmaku2ass), danmaku file converter, used when watching bilibili.com
   + [seam](https://github.com/Borber/seam), living video extractor, used when watching some live sites
+  + [EMMS](https://www.gnu.org/software/emms/), this package will work well together with EMMS
 
 For Arch Linux User, all dependencies with one command:
 ```sh
