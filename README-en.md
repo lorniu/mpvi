@@ -1,10 +1,11 @@
-# Integrate Org with Video
+# Integrated Video Tool on Emacs via MPV
 
 What can do:
-- Watch video (local, remote, living) with MPV
+- Watch videos (local, remote, living) with MPV
 - Controll MPV with emacs
 - Integrate with Org Mode, make taking video-notes easily
 - Integrate Clip/Screenshot/OCR and so on
+- Integrate with EMMS, manage videos easily
 
 Similar projects
 - https://github.com/yuchen-lea/org-media-note
@@ -15,7 +16,7 @@ I just wrote this for fun. Now release it for the ones who need it.
 ## Installation
 
 - It's based on [mpv.el](https://github.com/kljohann/mpv.el), make sure it is installed
-- Download and add this repo to your `load-path`, then `(require 'org-mpvi)`
+- Download and add this repo to your `load-path`, then `(require 'mpvi)`
 - Install [mpv](https://mpv.io/) and [yt-dlp](https://github.com/yt-dlp/yt-dlp), they are the main dependencies.
 - [Optional] Install dependencies you need:
   + [ffmpeg](https://ffmpeg.org/), used to clip video
@@ -37,11 +38,11 @@ winget install mpv yt-dlp ffmpeg Tesseract-OCR
 ## Usage
 
 Three core commands:
-1. `org-mpvi-open`, open video (local or remote) with MPV
-2. `org-mpvi-seek`, control opened MPV with minibuffer
-3. `org-mpvi-insert`, insert timestamp link of video to current org buffer
+1. `mpvi-open`, open video (local or remote) with MPV
+2. `mpvi-seek`, control opened MPV with minibuffer
+3. `mpvi-insert`, insert timestamp link of video to current org buffer
 
-Command `org-mpvi-seek` is the most frequently used one. It integrates many functions through minibuffer:
+Command `mpvi-seek` is the most frequently used one. It integrates many functions through minibuffer:
 - `i` Insert timestamp link into current buffer
 - `Space` Toggle play and pause
 - `j/k/l` Change the playback speed
@@ -55,17 +56,17 @@ Command `org-mpvi-seek` is the most frequently used one. It integrates many func
 - `q/C-q` quit minibuffer
 
 Timestamp link is link of format `[mpv:https://xxx.com#10-30]`. It's clickable and responses below shortcuts when cursor on it:
-- `, s` Enter `org-mpvi-seek` interface
 - `, ,` Play video in current link
+- `, s` Enter `mpvi-seek` interface
 - `, a` Change the start time in current link
 - `, b` Change the end time in current link
 - `, v` Preview the screenshot of current time position in current link
 - `, c` Video download, transcode, clip and so on, **ALL IN ONE**.
 
 Look the keymap definitions for more:
-- `org-mpvi-open-map`
-- `org-mpvi-seek-map`
-- `org-mpvi-link-keymap`
+- `mpvi-open-map`
+- `mpvi-seek-map`
+- `mpvi-org-link-map`
 
 ## Miscellaneous
 

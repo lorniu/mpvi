@@ -1,14 +1,14 @@
-# Integrate Org with Video
+# Integrated Video Tool on Emacs via MPV
 
 Knock knock, [English Help](README-en.md).
 
 ## 简介
 
-将 Org Mode 跟 mpv/ffmpeg/yt-dlp 等有机结合，娱乐、学习两不误:
+将 MPV 跟 ffmpeg/yt-dlp/org-mode/emms 等有机结合，娱乐、学习两不误:
 - 通过 MPV 看视频 (本地、网络、直播)
 - 对视频播放进行控制 (进度、速度等)
 - 对视频进行相关操作 (下载、转换，截图，OCR 等)
-- 结合 Org-Buffer 整理笔记
+- 结合 EMMS 管理视频；结合 Org Mode 整理笔记
 
 类似项目:
 - https://github.com/yuchen-lea/org-media-note
@@ -20,7 +20,7 @@ Knock knock, [English Help](README-en.md).
 
 ## 安装
 
-首先确保已安装 `mpv.el`, 然后下载本仓库，加入到 `load-path`，并 `(require 'org-mpvi)`。
+首先确保已安装 [mpv.el](https://github.com/kljohann/mpv.el), 然后下载本仓库，加入到 `load-path`，并 `(require 'mpvi)`。
 
 之后安装相关依赖。除了 [mpv](https://mpv.io/) 是必须的外，其他的是可选的:
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp)，如果要看网络视频，这个必须要安装
@@ -43,11 +43,11 @@ winget install mpv yt-dlp ffmpeg Tesseract-OCR
 ## 使用
 
 主要有 3 个命令:
-1. `org-mpvi-open`，打开视频文件或网络链接
-2. `org-mpvi-seek`，通过 minibuffer 的方式对播放的视频进行控制
-3. `org-mpvi-insert`，在 org buffer 中插入当前播放视频的带时间戳的链接
+1. `mpvi-open`，打开视频文件或网络链接
+2. `mpvi-seek`，通过 minibuffer 的方式对播放的视频进行控制
+3. `mpvi-insert`，在 org buffer 中插入当前播放视频的带时间戳的链接
 
-其中 `org-mpvi-seek` 是最核心的命令，它通过 minibuffer 集成了很多功能。比如:
+其中 `mpvi-seek` 是最核心的命令，它通过 minibuffer 集成了很多功能。比如:
 - `i` 在 buffer 中插入时间戳链接
 - `Space` 切换暂停与播放
 - `j/k/l` 调整播放速度
@@ -61,23 +61,23 @@ winget install mpv yt-dlp ffmpeg Tesseract-OCR
 - `q/C-q` 退出 minibuffer
 
 时间戳是一个 `[mpv:https://xxx.com#10-30]` 格式的链接，可以直接点击。光标置于其上，有如下快捷键:
-- `, s` 进入到 `org-mpvi-seek` 界面
 - `, ,` 播放当前链接中的视频
+- `, s` 进入到 `mpvi-seek` 界面
 - `, a` 更改链接中视频的开始时间
 - `, b` 更改链接中视频的结束时间
 - `, v` 预览链接中视频时间戳位置的画面
 - `, c` 视频的下载、转码、截取。**All In One**, 很好用
 
 其他补充:
-- 支持视频分 P 播放。比如，可以直接用 `org-mpvi-open` 打开 B 站播放列表 url 或专栏合集 url
-- 目前直播仅支持斗鱼和抖音。其他的可以仿照 `org-mpvi-ps.el` 中的代码自行扩展。我不看其他的，所以没加
-- 详细的快捷键参见 map 定义: `org-mpvi-open-map`, `org-mpvi-seek-map`, `org-mpvi-link-keymap`。不合意可自行重新绑定
 - 如果纯粹看视频/直播，并通过 minibuffer 操控 MPV，并不需要 Org Mode。但进行插入、编辑操作则必须在 Org Mode Buffer 中
+- 支持视频分 P 播放。比如，可以直接用 `mpvi-open` 打开 B 站播放列表 url 或专栏合集 url
+- 目前直播仅支持斗鱼和抖音。其他的可以仿照 `mpvi-ps.el` 中的代码自行扩展。我不看其他的，所以没加
+- 详细的快捷键参见 map 定义: `mpvi-open-map`, `mpvi-seek-map`, `mpvi-org-link-map`。不合意可自行扩展、重新绑定
 - yt-dlp 对播放列表 (playlist) 信息的返回不够详细不够友好。这导致打开视频链接的时候可能会卡顿一下，并且切换列表的时候不会显示分 P 标题。这个可能只能通过上游解决，有点难受
 - 最大的遗憾是，看直播的时候没弹幕。**这种实时弹幕，不知道有没有啥实现的思路**
 - 本来想把 `danmaku2ass` 和解析直播链接也用 `elisp` 重新实现一下的。后面想想这简直是自寻烦恼，这种洁癖要不得，第三方的依赖不差这一两个，因此作罢
 - 通过 Emacs 对 MPV 播放器进行详细控制不在本包范畴之内，推荐使用 `transient` 提供集成各种命令的界面，它是内置的，且语法简单
-- 结合视频网站的 API 可以实时抓取其收藏夹、热门视频等，结合本包食用，特别香。再结合 Org Mode 对视频进行分类、整理，更香。再加上带视频时间戳链接的笔记，完美。现在基本可以做到不打开网页看 B 站视频了
+- 结合视频网站的 API 可以实时抓取其收藏夹、热门视频等，结合本包食用，特别香；通过 EMMS 对视频列表进行管理，特别方便；再结合 Org Mode 对视频进行分类、整理，更香；再加上带视频时间戳链接的笔记，完美。现在基本可以做到不打开网页看 B 站视频了
 - 最近 B 站改版了电影页面，所以电影暂时是看不了的。等待上游补丁 (https://github.com/yt-dlp/yt-dlp/pull/6022)
 
 ## 其他
