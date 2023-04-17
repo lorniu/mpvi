@@ -1197,6 +1197,7 @@ Remove `mpvi-emms-player' from list when DEINIT not nil."
   (pcase-let ((`(,path ,beg ,end) (mpvi-parse-link link)))
     (mpvi-play path beg end)))
 
+;;;###autoload
 (defun mpvi-org-link-init ()
   "Setup org link with `mpv' prefix."
   (set-keymap-parent mpvi-org-link-map org-mouse-map)
