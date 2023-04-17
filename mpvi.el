@@ -254,43 +254,49 @@ TYPE should be keyword as :host format, for example :www.youtube.com,
 if it's nil then this method will be a dispatcher."
   (:method (type url &rest args)
            (unless type ; the first call
-             (let* ((typefn (lambda (url)
-                              (intern (concat ":" (url-host (url-generic-parse-url url))))))
-                    (playlist (mpvi-extract-playlist
-                               (funcall typefn url)  url))
-                    (purl (car playlist)) ret)
-               (if-let ((dest (apply #'mpvi-extract-url  ; dispatch to method
-                                     (funcall typefn (or purl url))
-                                     (or purl url) args)))
-                   (progn (setq ret dest)
-                          (unless (plist-get ret :url)
-                            (plist-put ret :url (or purl url))))
-                 (setq ret (list :url (or purl url))))
-               (when playlist
-                 (plist-put ret :playlist url)
-                 (plist-put ret :playlist-index (cadr playlist)))
-               (unless (equal (plist-get ret :url) url)
-                 (plist-put ret :origin url))
-               ret))))
+             (let* ((typefn (lambda (url) (intern (concat ":" (url-host (url-generic-parse-url url))))))
+                    (playlist (mpvi-extract-playlist (funcall typefn url) url)))
+               (if (and playlist (null (car playlist))) ; when no selected-index, return all
+                   (list :playlist-url url :playlist-items (cdr playlist))
+                 (let ((purl (if playlist (nth (car playlist) (cdr playlist)))) ret)
+                   (if-let ((dest (apply #'mpvi-extract-url  ; dispatch to method
+                                         (funcall typefn (or purl url))
+                                         (or purl url) args)))
+                       (progn (setq ret dest)
+                              (unless (plist-get ret :url)
+                                (plist-put ret :url (or purl url))))
+                     (setq ret (list :url (or purl url))))
+                   (when playlist
+                     (plist-put ret :playlist-url url)
+                     (plist-put ret :playlist-index (car playlist))
+                     (plist-put ret :playlist-items (cdr playlist)))
+                   (unless (equal (plist-get ret :url) url)
+                     (plist-put ret :origin-url url))
+                   ret))))))
 
-(cl-defgeneric mpvi-extract-playlist (type url)
+(cl-defgeneric mpvi-extract-playlist (type url &optional no-choose)
   "Check if URL is a playlist link. If it is, return the selected playlist-item.
-TYPE is platform as the same as in `mpvi-extract-url'."
-  (:method (_type url)
+TYPE is platform as the same as in `mpvi-extract-url'.
+Don't prompt user to choose When NO-CHOOSE is not nil.
+Return list of (index-or-title playlist-items)."
+  (:method (_type url &optional no-choose)
            (let ((meta (mpvi-ytdlp-url-metadata url)))
-             (when (alist-get 'is_playlist meta)
-               (let* ((items (cl-loop for item across (alist-get 'entries meta) for i from 1
-                                      for url = (alist-get 'url item)
-                                      for styled = (if (member url mpvi-play-history) (propertize url 'face mpvi-annotation-face) url)
-                                      collect (propertize styled 'line-prefix (propertize (format "%2d. " i) 'face mpvi-annotation-face))))
-                      (item (completing-read
-                             (concat "Playlist" (if-let (title (alist-get 'title meta)) (format "(%s)" title))  ": ")
-                             (lambda (input pred action)
-                               (if (eq action 'metadata)
-                                   `(metadata (display-sort-function . ,#'identity))
-                                 (complete-with-action action items input pred)))
-                             nil t nil nil (car items))))
-                 (list item (cl-position item items :test #'string=)))))))
+             (when (assoc 'is_playlist meta)
+               (let ((urls (cl-loop for item across (alist-get 'entries meta)
+                                    collect (alist-get 'url item))))
+                 (if no-choose (cons (alist-get 'title meta) urls)
+                   (let* ((items (cl-loop
+                                  for url in urls for i from 1
+                                  for item = (if (member url mpvi-play-history) (propertize url 'face mpvi-annotation-face) url)
+                                  collect (propertize item 'line-prefix (propertize (format "%2d. " i) 'face mpvi-annotation-face))))
+                          (item (completing-read
+                                 (concat "Playlist" (if-let (title (alist-get 'title meta)) (format " (%s)" title))  ": ")
+                                 (lambda (input pred action)
+                                   (if (eq action 'metadata)
+                                       `(metadata (display-sort-function . ,#'identity))
+                                     (complete-with-action action items input pred)))
+                                 nil t nil nil (car items))))
+                     (cons (cl-position item urls :test #'string=) urls))))))))
 
 (defun mpvi-origin-path (&optional path)
   "Reverse of `mpvi-extract-url', return the origin url for PATH.
@@ -298,7 +304,7 @@ When PATH is nil then return the path of current playing video."
   (unless path
     (mpvi-bark-if-not-live)
     (setq path (mpv-get-property "path")))
-  (or (plist-get mpvi-current-url-metadata :origin) path))
+  (or (plist-get mpvi-current-url-metadata :origin-url) path))
 
 (defun mpvi-play (path &optional beg end paused)
   "Play PATH from BEG to END. Pause at BEG when PAUSED not-nil."
@@ -317,6 +323,7 @@ When PATH is nil then return the path of current playing video."
     (let (opts (hook (lambda (&rest _) (message "Started."))))
       (when (mpv--url-p path) ; preprocessing url and extra mpv options
         (when-let ((ret (mpvi-extract-url nil path)))
+          (unless (plist-get ret :url) (user-error "Unknown url"))
           (setq mpvi-current-url-metadata ret)
           (setq path (or (plist-get ret :url) path))
           (setq opts (plist-get ret :opts))
@@ -557,6 +564,8 @@ Return (suggestion-save-name . video-format)."
       (setq format (string-replace " " "" (string-replace "," "+" format)))
       (cons (concat name "_" format "." ext) format))))
 
+(defvar mpvi-url-metadata-cache nil)
+
 (defun mpvi-ytdlp-url-metadata (url &optional opts)
   "Return metadata for URL, pass extra OPTS to `yt-dlp' for querying.
 I just want to judge if current URL is a playlist link, but I can't find
@@ -565,19 +574,21 @@ it's good enough. Then I can not find good way to get all descriptions of
 playlist item with light request. This should be improved someday."
   (unless (executable-find "yt-dlp")
     (user-error "Program 'yt-dlp' should be installed"))
-  (with-temp-buffer
-    (condition-case err
-        (progn
-          (mpvi-log "Request matadata for %s" url)
-          (apply #'mpvi-call-process
-                 "yt-dlp" url "-J" "--flat-playlist"
-                 (split-string-shell-command (or opts mpvi-ytdlp-extra-args "")))
-          (goto-char (point-min))
-          (let* ((json (json-read))
-                 (playlistp (equal "playlist" (alist-get '_type json))))
-            (if playlistp (nconc json (list '(is_playlist . t))))
-            json))
-      (error (user-error "Error when get metadata for %s: %s" url (string-trim (buffer-string)))))))
+  (or (cdr (assoc url mpvi-url-metadata-cache))
+      (with-temp-buffer
+        (condition-case err
+            (progn
+              (mpvi-log "Request matadata for %s" url)
+              (apply #'mpvi-call-process
+                     "yt-dlp" url "-J" "--flat-playlist"
+                     (split-string-shell-command (or opts mpvi-ytdlp-extra-args "")))
+              (goto-char (point-min))
+              (let* ((json (json-read))
+                     (playlistp (equal "playlist" (alist-get '_type json))))
+                (if playlistp (nconc json (list '(is_playlist . t))))
+                (push (cons url json) mpvi-url-metadata-cache)
+                json))
+          (error (user-error "Error when get metadata for %s: %s" url (string-trim (buffer-string))))))))
 
 (defun mpvi-ytdlp-output-field (url field &optional opts)
   "Get FIELD information for video URL.
@@ -702,9 +713,11 @@ Implement with `powershell'."
 ;;;###autoload
 (defun mpvi-open (path &optional act)
   "Open video with mpv, PATH is a local file or remote url.
-When ACT is nil or 'play, play the video. If ACT is 'add, just add to playlist.
-When called interactively, prompt minibuffer with `C-x RET' to add to playlist,
-type `C-x b' to choose video path from `mpvi-favor-paths'."
+If ACT is nil or 'play, play the video.
+If ACT is 'add, add to EMMS playlist.
+If ACT is 'dup, clip the video.
+Keybind `C-x RET' to add to playlist.
+Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
   (interactive (catch 'mpvi-open
                  (minibuffer-with-setup-hook
                      (lambda ()
@@ -723,12 +736,9 @@ type `C-x b' to choose video path from `mpvi-favor-paths'."
       (setq mpvi-current-url-metadata nil)
       (mpvi-play path))
      ((equal act 'add)
-      (when (mpv--url-p path)
-        (setq path (or (plist-get (mpvi-extract-url nil path :urlonly t) :url) path)))
-      (if mpvi-emms-player ; add to EMMS playlist
-          (if (mpv--url-p path) (emms-add-url path) (emms-add-file path))
-        (mpvi-bark-if-not-live)
-        (mpv--playlist-append path)))
+      (unless mpvi-emms-player
+        (user-error "EMMS integrated not available"))
+      (mpvi-emms-add path))
      ((equal act 'dup)
       (if (mpv--url-p path)
           (mpvi-ytdlp-download path)
@@ -1004,7 +1014,7 @@ If NUM is not nil, go back that position first."
 If any, prompt user to choose one video in playlist to play."
   (interactive)
   (mpvi-bark-if-not-live)
-  (if-let ((playlist (plist-get mpvi-current-url-metadata :playlist))
+  (if-let ((playlist (plist-get mpvi-current-url-metadata :playlist-url))
            (playlist-index (plist-get mpvi-current-url-metadata :playlist-index))
            (msg "Switch done."))
       (condition-case nil
@@ -1149,6 +1159,39 @@ Remove `mpvi-emms-player' from list when DEINIT not nil."
     (emms-player-set mpvi-emms-player 'seek #'mpvi-seek-walk)
     (emms-player-set mpvi-emms-player 'seek-to #'mpvi-seek-walk)
     (add-to-list #'emms-player-list 'mpvi-emms-player)))
+
+;;;###autoload
+(defun mpvi-emms-add (path &optional label)
+  "Add PATH to EMMS playlist. LABEL is extra info to show in EMMS buffer."
+  (interactive (list (ffap-read-file-or-url
+                      "Add to EMMS (file or url): "
+                      (prog1 (mpvi-ffap-guesser) (ffap-highlight)))))
+  (unless (and (> (length path) 0) (or (mpv--url-p path) (file-exists-p path)))
+    (user-error "Not correct file or url"))
+  (unless mpvi-emms-player (mpvi-emms-init))
+  (if (mpv--url-p path)
+      (let ((playlist (mpvi-extract-playlist nil path t)) choosen desc)
+        (when playlist
+          (setq choosen
+                (completing-read "Choose from playlist: "
+                                 (lambda (input pred action)
+                                   (if (eq action 'metadata)
+                                       `(metadata (display-sort-function . ,#'identity))
+                                     (complete-with-action action (cons "ALL" (cdr playlist)) input pred)))
+                                 nil t)))
+        (if (equal choosen "ALL") (setq choosen (cdr playlist)))
+        (setq choosen (or choosen path))
+        (unless (consp choosen) (setq choosen (list choosen)))
+        (cl-loop with desc = (or label (read-string "Description: " (car playlist)))
+                 for url in choosen
+                 for disp = (if (> (length desc) 0) (format "%s - %s" desc url) url)
+                 do (emms-add-url (propertize url 'display disp))))
+    (setq path (expand-file-name path))
+    (cond ((file-directory-p path)
+           (emms-add-directory path))
+          ((file-regular-p path)
+           (emms-add-file path))
+          (t (user-error "Unkown source: %s" path)))))
 
 (defun mpvi-emms-playable-p (track)
   (memq (emms-track-get track 'type) '(file url)))

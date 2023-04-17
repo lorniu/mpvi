@@ -100,11 +100,11 @@ If URLONLY is not nil, don't resolve danmaku file."
       (setq ret (list :opts mpvi-bilibili-extra-mpv-args)))
     ;; if this is a link with query string of p=NUM
     (when (string-match "^\\(.*\\)\\?p=\\([0-9]+\\)" url)
-      (nconc ret `(:playlist ,(match-string 1 url) :playlist-index ,(string-to-number (match-string 2 url)))))
+      (nconc ret `(:playlist-url ,(match-string 1 url) :playlist-index ,(string-to-number (match-string 2 url)))))
     ;; begin time
     (append ret `(:out-url-decorator ,#'mpvi-bilibili-add-begin-time-to-url))))
 
-(cl-defmethod mpvi-extract-playlist ((_ (eql :www.bilibili.com)) url)
+(cl-defmethod mpvi-extract-playlist ((_ (eql :www.bilibili.com)) url &rest _)
   "Extract playlist for bilibili URL.
 For bilibili, url with `?p=NUM' suffix is not a playlist link."
   (unless (string-match "^\\(.*\\)\\?p=\\([0-9]+\\)" url)
@@ -122,7 +122,7 @@ For bilibili, url with `?p=NUM' suffix is not a playlist link."
             :opts (list (concat "--force-media-title=" (cadr ret)))
             :hook (lambda (&rest _) (message "Hello Douyu: %s" (mpv-get-property "media-title")))))))
 
-(cl-defmethod mpvi-extract-playlist ((_ (eql :www.douyu.com)) _)) ; skip check playlist
+(cl-defmethod mpvi-extract-playlist ((_ (eql :www.douyu.com)) &rest _)) ; skip check playlist
 
 
 ;;; Douyin Living
@@ -133,7 +133,7 @@ For bilibili, url with `?p=NUM' suffix is not a playlist link."
     (let ((ret (mpvi-extract-url-by-seam 'douyin (match-string 1 url))))
       (list :url (car ret) :opts (list (concat "--force-media-title=" (cadr ret)))))))
 
-(cl-defmethod mpvi-extract-playlist ((_ (eql :live.douyin.com)) _)) ; skip check playlist
+(cl-defmethod mpvi-extract-playlist ((_ (eql :live.douyin.com)) &rest _)) ; skip check playlist
 
 (provide 'mpvi-ps)
 
