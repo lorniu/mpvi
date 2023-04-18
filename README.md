@@ -42,12 +42,14 @@ winget install mpv yt-dlp ffmpeg Tesseract-OCR
 
 ## 使用
 
-主要有 3 个命令:
+核心命令：
 1. `mpvi-open`，打开视频文件或网络链接
 2. `mpvi-seek`，通过 minibuffer 的方式对播放的视频进行控制
 3. `mpvi-insert`，在 org buffer 中插入当前播放视频的带时间戳的链接
+4. `mpvi-clip`，借助 ffmepg/ytdlp 实现视频的下载、剪辑、转码
+5. `mpvi-emms-add`，向 EMMS playlist 中添加视频路径或链接
 
-其中 `mpvi-seek` 是最核心的命令，它通过 minibuffer 集成了很多功能。比如:
+其中 `mpvi-seek` 是最常用的，它通过 minibuffer 集成了很多功能。比如:
 - `i` 在 buffer 中插入时间戳链接
 - `Space` 切换暂停与播放
 - `j/k/l` 调整播放速度

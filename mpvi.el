@@ -162,7 +162,7 @@ I don't know whether better solutions exist."
 (defun mpvi-read-file-name (prompt default-name)
   "Read file name using a PROMPT minibuffer.
 DEFAULT-NAME is used when only get a directory name."
-  (let* ((default-directory mpvi-last-save-directory)
+  (let* ((default-directory (or mpvi-last-save-directory default-directory))
          (target (read-file-name prompt)))
     (if (directory-name-p target)
         (expand-file-name (file-name-nondirectory default-name) target)
@@ -1090,18 +1090,24 @@ If any, prompt user to choose one video in playlist to play."
     map))
 
 ;;;###autoload
-(defun mpvi-current-link-clip (path &optional target beg end)
+(defun mpvi-clip (path &optional target beg end)
   "Cut or convert video for PATH from BEG to END, save to TARGET.
 Default handle current video at point."
   (interactive
-   (if-let ((node (mpvi-parse-link-at-point)))
+   (if-let ((node (ignore-errors (mpvi-parse-link-at-point))))
        (let ((path (plist-get node :path)))
          (if (or (mpv--url-p path) (file-exists-p path))
              (list path
                    (unless (mpv--url-p path) (mpvi-read-file-name "Save to: " path))
                    (plist-get node :vbeg) (plist-get node :vend))
            (user-error "File not found: %s" path)))
-     (user-error "No MPV link found at point")))
+     (let* ((path (unwind-protect
+                      (ffap-read-file-or-url
+                       "Clip video (file or url): "
+                       (prog1 (mpvi-ffap-guesser) (ffap-highlight)))
+                    (ffap-highlight t)))
+            (target (unless (mpv--url-p path) (mpvi-read-file-name "Save to: " path))))
+       (list path target))))
   (funcall (if (mpv--url-p path) mpvi-remote-video-handler mpvi-local-video-handler)
            path target beg end))
 
@@ -1230,7 +1236,7 @@ Remove `mpvi-emms-player' from list when DEINIT not nil."
     (define-key map (kbd ", a")   #'mpvi-insert)
     (define-key map (kbd ", b")   #'mpvi-current-link-update-end-pos)
     (define-key map (kbd ", v")   #'mpvi-current-link-show-preview)
-    (define-key map (kbd ", c")   #'mpvi-current-link-clip)
+    (define-key map (kbd ", c")   #'mpvi-clip)
     (define-key map (kbd ", ,")   #'org-open-at-point)
     (define-key map (kbd ", SPC") #'mpv-pause)
     map))

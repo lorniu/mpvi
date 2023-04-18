@@ -37,10 +37,12 @@ winget install mpv yt-dlp ffmpeg Tesseract-OCR
 
 ## Usage
 
-Three core commands:
+Core commands:
 1. `mpvi-open`, open video (local or remote) with MPV
 2. `mpvi-seek`, control opened MPV with minibuffer
 3. `mpvi-insert`, insert timestamp link of video to current org buffer
+4. `mpvi-clip`, download & clip & transcode videos via ffmepg/ytdlp
+5. `mpvi-emms-add`, add video link/file to EMMS playlist
 
 Command `mpvi-seek` is the most frequently used one. It integrates many functions through minibuffer:
 - `i` Insert timestamp link into current buffer
