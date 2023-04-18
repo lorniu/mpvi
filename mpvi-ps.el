@@ -1,11 +1,10 @@
-;;; mpvi-ps.el --- Integrated Video Tool via MPV -*- lexical-binding: t -*-
+;;; mpvi-ps.el --- Integrated MPV Tool -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2023 lorniu <lorniu@gmail.com>
 
 ;; Author: lorniu <lorniu@gmail.com>
 ;; URL: https://github.com/lorniu/mpvi
-;; Package-Requires: ((emacs "28.1") (mpv "0.2.0"))
-;; Keywords: convenience, docs
+;; Package-Requires: ((emacs "28.1"))
 ;; SPDX-License-Identifier: MIT
 ;; Version: 1.0
 
@@ -61,7 +60,7 @@ PLATFORM can be bili, douyu and so on, see `https://github.com/Borber/seam' for 
     (mpvi-log "Get living url with seam for %s: %s" platform rid)
     (mpvi-call-process "seam" (format "%s" platform) rid)
     (goto-char (point-max))
-    (skip-chars-backward " \t\n")
+    (skip-chars-backward " \t\r\n")
     (backward-sexp)
     (let* ((json (ignore-errors (json-read)))
            (title (alist-get 'title json))
@@ -78,7 +77,8 @@ PLATFORM can be bili, douyu and so on, see `https://github.com/Borber/seam' for 
 
 (defvar mpvi-bilibili-enable-danmaku t)
 
-(defvar mpvi-bilibili-extra-mpv-args (list "--vf=lavfi=\"fps=60\"" "--sub-ass-force-margins"))
+(defvar mpvi-bilibili-extra-postcmds `((set vf "lavfi=\"fps=60\"")
+                                       (set sub-ass-force-margins yes)))
 
 (defun mpvi-bilibili-add-begin-time-to-url (url ts)
   "Add TS param to URL. Then open the result URL in browser will begin with TS instead of begin."
@@ -92,12 +92,12 @@ If URLONLY is not nil, don't resolve danmaku file."
       (condition-case err
           ;; danmaku.xml -> danmaku.ass
           (let* ((sub (mpvi-convert-danmaku2ass (mpvi-ytdlp-download-subtitle url) current-prefix-arg))
-                 (opts `(,(concat "--sub-file=" sub) ,@mpvi-bilibili-extra-mpv-args)))
-            (setq ret (list :subfile sub :opts opts)))
+                 (cmds `(,@mpvi-bilibili-extra-postcmds (sub-add ,sub))))
+            (setq ret (list :subfile sub :cmds cmds)))
         (error (message "Bilibili load danmaku failed: %S" err))))
     ;; default
     (unless ret
-      (setq ret (list :opts mpvi-bilibili-extra-mpv-args)))
+      (setq ret (list :cmds mpvi-bilibili-extra-postcmds)))
     ;; if this is a link with query string of p=NUM
     (when (string-match "^\\(.*\\)\\?p=\\([0-9]+\\)" url)
       (nconc ret `(:playlist-url ,(match-string 1 url) :playlist-index ,(string-to-number (match-string 2 url)))))
@@ -118,9 +118,7 @@ For bilibili, url with `?p=NUM' suffix is not a playlist link."
   (when (or (string-match "^https://www.douyu.com/\\([0-9]+\\)" url)
             (string-match "^https://www.douyu.com/topic/[[:alnum:]]+\\?rid=\\([0-9]+\\)" url))
     (let ((ret (mpvi-extract-url-by-seam 'douyu (match-string 1 url))))
-      (list :url (car ret)
-            :opts (list (concat "--force-media-title=" (cadr ret)))
-            :hook (lambda (&rest _) (message "Hello Douyu: %s" (mpv-get-property "media-title")))))))
+      (list :url (car ret) :title (cadr ret) :logo "DouYu"))))
 
 (cl-defmethod mpvi-extract-playlist ((_ (eql :www.douyu.com)) &rest _)) ; skip check playlist
 
@@ -131,7 +129,7 @@ For bilibili, url with `?p=NUM' suffix is not a playlist link."
   "Return the real video URL for douyin living."
   (when (string-match "^https://live.douyin.com/\\([0-9]+\\)" url)
     (let ((ret (mpvi-extract-url-by-seam 'douyin (match-string 1 url))))
-      (list :url (car ret) :opts (list (concat "--force-media-title=" (cadr ret)))))))
+      (list :url (car ret) :title (cadr ret) :logo "DouYin"))))
 
 (cl-defmethod mpvi-extract-playlist ((_ (eql :live.douyin.com)) &rest _)) ; skip check playlist
 
