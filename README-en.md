@@ -1,13 +1,14 @@
-# Integrated Video Tool on Emacs via MPV
+# Integrated MPV Tool on Emacs
 
 What can do:
-- Watch videos (local, remote, living) with MPV
-- Controll MPV with emacs
-- Integrate with Org Mode, make taking video-notes easily
-- Integrate Clip/Screenshot/OCR and so on
-- Integrate with EMMS, manage videos easily
+- Watch local, remote and living videos (danmaku support for some)
+- Manage playlist with EMMS, and control playing with MiniBuffer
+- Integrate Download/Clip/Screenshot/OCR videos and so on
+- Integrated with Org Mode, make taking video-notes easily
+- Make MPV player in EMMS support Windows
 
 Similar projects
+- https://github.com/kljohann/mpv.el
 - https://github.com/yuchen-lea/org-media-note
 - https://github.com/bpanthi977/org-mpv-notes
 
@@ -15,7 +16,7 @@ I just wrote this for fun. Now release it for the ones who need it.
 
 ## Installation
 
-- It's based on [mpv.el](https://github.com/kljohann/mpv.el), make sure it is installed
+- It's based on [EMMS](https://www.gnu.org/software/emms/), make sure it is installed
 - Download and add this repo to your `load-path`, then `(require 'mpvi)`
 - Install [mpv](https://mpv.io/) and [yt-dlp](https://github.com/yt-dlp/yt-dlp), they are the main dependencies.
 - [Optional] Install dependencies you need:
@@ -23,7 +24,6 @@ I just wrote this for fun. Now release it for the ones who need it.
   + [tesseract](https://github.com/tesseract-ocr/tesseract), used to OCR
   + [danmaku2ass](https://github.com/m13253/danmaku2ass), danmaku file converter, used when watching bilibili.com
   + [seam](https://github.com/Borber/seam), living video extractor, used when watching some live sites
-  + [EMMS](https://www.gnu.org/software/emms/), this package will work well together with EMMS
 
 For Arch Linux User, all dependencies with one command:
 ```sh
