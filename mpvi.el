@@ -580,7 +580,7 @@ playlist item with light request. This should be improved someday."
             (progn
               (mpvi-log "Request matadata for %s" url)
               (apply #'mpvi-call-process
-                     "yt-dlp" url "-J" "--flat-playlist"
+                     "yt-dlp" url "-J" "--flat-playlist" "--no-warnings"
                      (split-string-shell-command (or opts mpvi-ytdlp-extra-args "")))
               (goto-char (point-min))
               (let* ((json (json-read))
