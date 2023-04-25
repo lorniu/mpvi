@@ -227,7 +227,7 @@ When PATH is nil then return the path of current playing video."
       (while (emms-player-mpv-proc-playing-p) (sleep-for 0.05))
       (throw 'mpvi-ret nil))))
 
-(defalias 'mpvi-async-cmd 'emms-player-mpv-cmd)
+(defalias 'mpvi-async-cmd #'emms-player-mpv-cmd)
 
 (cl-defun mpvi-prop (sym &optional (val nil supplied))
   "Run command set_property SYM VAL in MPV.
@@ -304,7 +304,7 @@ Alert user when not seekable when ARG not nil."
                  `(sub-file . ,(format "\"%s\"" subfile)))
               ,@opts))
       (mpvi-log "load opts: %S" opts)
-      (format "Waiting %s..." path)
+      (message "Waiting %s..." path)
       (let* ((done (lambda (&rest _)
                      (if started (funcall started)
                        (message "Started%s" (if title
@@ -320,7 +320,7 @@ Alert user when not seekable when ARG not nil."
                     ,@(cl-loop for c in cmds collect (list c))
                     ((set_property pause ,(or paused 'no)) . ,done))))
         (let* ((play-cmd (cons 'batch (delq nil lst)))
-               (start-func (apply-partially 'mpvi-async-cmd play-cmd)))
+               (start-func (apply-partially #'mpvi-async-cmd play-cmd)))
           (mpvi-log "load-commands: %S" play-cmd)
           (funcall start-func)))))
   (push path mpvi-play-history))
@@ -368,11 +368,12 @@ The :width can make image cannot display too large in org mode."
 
 (defun mpvi-insert-attach-link (file)
   "Save image FILE to org file using `org-attach'."
+  (require 'org-attach)
   ;; attach it
   (let ((org-attach-method 'mv)) (org-attach-attach file))
   ;; insert the attrs
   (when mpvi-attach-link-attrs
-    (insert (concat (string-trim mpvi-attach-link-attrs) "\n")))
+    (insert (string-trim mpvi-attach-link-attrs) "\n"))
   ;; insert the link
   (insert "[[attachment:" (file-name-base file) "." (file-name-extension file) "]]")
   ;; show it
@@ -446,13 +447,13 @@ it is nil pass \"video\" as default, else prompt user to choose one."
 ;; tesseract
 
 (defcustom mpvi-tesseract-args "-l chi_sim"
-  "Extra options pass to 'tesseract'."
+  "Extra options pass to `tesseract'."
   :type 'string)
 
 (defun mpvi-ocr-by-tesseract (file)
   "Run tesseract OCR on the screenshot FILE."
   (unless (executable-find "tesseract")
-    (user-error "Program 'tesseract' not found"))
+    (user-error "Program `tesseract' not found"))
   (with-temp-buffer
     (if (zerop (apply #'mpvi-call-process "tesseract" file "stdout"
                       (if mpvi-tesseract-args (split-string-and-unquote mpvi-tesseract-args))))
@@ -462,20 +463,20 @@ it is nil pass \"video\" as default, else prompt user to choose one."
 ;; ffmpeg
 
 (defcustom mpvi-ffmpeg-extra-args nil
-  "Extra options pass to 'ffmpeg'."
+  "Extra options pass to `ffmpeg'."
   :type 'string)
 
 (defcustom mpvi-ffmpeg-gif-filter "fps=10,crop=iw:ih:0:0,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"
-  "Filter used when use 'ffmpeg' to convert to gif file."
+  "Filter used when use `ffmpeg' to convert to gif file."
   :type 'string)
 
 (defun mpvi-convert-by-ffmpeg (file &optional target beg end opts)
   "Convert local video FILE from BEG to END using ffmpeg, output to TARGET.
 This can be used to cut/resize/reformat and so on.
-OPTS is a string, pass to 'ffmpeg' when it is not nil."
+OPTS is a string, pass to `ffmpeg' when it is not nil."
   (cl-assert (file-regular-p file))
   (unless (executable-find "ffmpeg")
-    (user-error "Program 'ffmpeg' not found"))
+    (user-error "Program `ffmpeg' not found"))
   (let* ((beg (if (numberp beg) (format " -ss %s" beg) ""))
          (end (if (numberp end) (format " -to %s" end) ""))
          (target (expand-file-name
@@ -531,7 +532,7 @@ OPTS is a string, pass to 'ffmpeg' when it is not nil."
 ;; yt-dlp
 
 (defcustom mpvi-ytdlp-extra-args nil
-  "The default extra options pass to 'yt-dlp'."
+  "The default extra options pass to `yt-dlp'."
   :type 'string)
 
 (defvar mpvi-ytdlp-metadata-cache nil)
@@ -543,10 +544,10 @@ better/faster solution. Maybe cache the results is one choice, but I don't think
 it's good enough. Then I can not find good way to get all descriptions of
 playlist item with light request. This should be improved someday."
   (unless (executable-find "yt-dlp")
-    (user-error "Program 'yt-dlp' should be installed"))
+    (user-error "Program `yt-dlp' should be installed"))
   (or (cdr (assoc url mpvi-ytdlp-metadata-cache))
       (with-temp-buffer
-        (condition-case err
+        (condition-case nil
             (progn
               (mpvi-log "Request matadata for %s" url)
               (apply #'mpvi-call-process
@@ -582,11 +583,11 @@ Return (suggestion-save-name . video-format)."
            (format (string-trim
                     (completing-read
                      "Format (choose directly for one, input like '1,4' for multiple. Default: 'bv,ba'): "
-                     (lambda (input pred action)
+                     (lambda (input _pred action)
                        (pcase action
                          ('metadata
                           `(metadata (display-sort-function . ,#'identity)))
-                         (`(boundaries . ,suffix)
+                         (`(boundaries . _)
                           `(boundaries . ,(cons (length input) 0)))
                          (_ (complete-with-action action fmts "" nil))))
                      nil nil nil nil "bv,ba")))
@@ -616,10 +617,10 @@ Pass extra OPTS to mpv if it is not nil."
 
 (defun mpvi-ytdlp-download (url &optional target beg end opts)
   "Download and clip video for URL to TARGET. Use BEG and END for range (trim).
-OPTS is a string, pass to 'yt-dlp' when it is not nil."
+OPTS is a string, pass to `yt-dlp' when it is not nil."
   (cl-assert (mpvi-url-p url))
   (unless (and (executable-find "yt-dlp") (executable-find "ffmpeg"))
-    (user-error "Programs 'yt-dlp' and 'ffmpeg' should be installed"))
+    (user-error "Programs `yt-dlp' and `ffmpeg' should be installed"))
   (let* ((fmt (mpvi-ytdlp-pick-format url))
          (beg (if (numberp beg) (format " -ss %s" beg)))
          (end (if (numberp end) (format " -to %s" end)))
@@ -667,9 +668,9 @@ OPTS is a string, pass to 'yt-dlp' when it is not nil."
 
 (defun mpvi-ytdlp-download-subtitle (url &optional prefix opts)
   "Download subtitle for URL and save as file named begin with PREFIX.
-Pass OPTS to 'yt-dlp' when it is not nil."
+Pass OPTS to `yt-dlp' when it is not nil."
   (unless (executable-find "yt-dlp")
-    (user-error "Program 'yt-dlp' should be installed"))
+    (user-error "Program `yt-dlp' should be installed"))
   (with-temp-buffer
     (mpvi-log "Downloading subtitle for %s" url)
     (apply #'mpvi-call-process
@@ -838,7 +839,7 @@ JSON-DATA is argument."
     (if (emms-player-mpv-ipc-fifo-p)
         (progn ;; ipc-stop is to clear any buffered commands
           (emms-player-mpv-ipc-stop)
-          (apply 'emms-player-mpv-proc-init
+          (apply #'emms-player-mpv-proc-init
                  (if track-playlist-option
                      (list (concat "--playlist=" track-name))
                    (list "--" track-name)))
@@ -883,11 +884,32 @@ JSON-DATA is argument."
 
 ;; [open]
 
+(defcustom mpvi-favor-paths nil
+  "Your favor video path list.
+Item should be a path string or a cons.
+
+For example:
+
+  \\='(\"~/video/aaa.mp4\"
+    \"https://www.youtube.com/watch?v=NQXA\"
+    (\"https://www.douyu.com/110\" . \"some description\"))
+
+This can be used by `mpvi-open-from-favors' to quick open video."
+  :type 'list)
+
+(defvar mpvi-open-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map minibuffer-local-map)
+    (define-key map (kbd "C-x b") #'mpvi-open-from-favors)
+    (define-key map (kbd "C-x <return>") (lambda () (interactive) (throw 'mpvi-open (list (minibuffer-contents) 'add))))
+    (define-key map (kbd "C-x C-w") (lambda () (interactive) (throw 'mpvi-open (list (minibuffer-contents) 'dup))))
+    map))
+
 ;;;###autoload
 (defun mpvi-open (path &optional act)
   "Deal with PATH, which is a local video or remote url.
-Play the video if ACT is nil or 'play', add to EMMS if ACT is 'add',
-clip the video if ACT is 'dup'.
+Play the video if ACT is nil or play, add to EMMS if ACT is add,
+clip the video if ACT is dup.
 Keybind `C-x RET' to add to playlist.
 Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
   (interactive (catch 'mpvi-open
@@ -914,27 +936,6 @@ Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
       (if (mpvi-url-p path)
           (mpvi-ytdlp-download path)
         (mpvi-convert-by-ffmpeg path))))))
-
-(defvar mpvi-open-map
-  (let ((map (make-sparse-keymap)))
-    (set-keymap-parent map minibuffer-local-map)
-    (define-key map (kbd "C-x b") #'mpvi-open-from-favors)
-    (define-key map (kbd "C-x <return>") (lambda () (interactive) (throw 'mpvi-open (list (minibuffer-contents) 'add))))
-    (define-key map (kbd "C-x C-w") (lambda () (interactive) (throw 'mpvi-open (list (minibuffer-contents) 'dup))))
-    map))
-
-(defcustom mpvi-favor-paths nil
-  "Your favor video path list.
-Item should be a path string or a cons.
-
-For example:
-
-  \\='(\"~/video/aaa.mp4\"
-    \"https://www.youtube.com/watch?v=NQXA\"
-    (\"https://www.douyu.com/110\" . \"some description\"))
-
-This can be used by `mpvi-open-from-favors' to quick open video."
-  :type 'list)
 
 ;;;###autoload
 (defun mpvi-open-from-favors ()
@@ -996,8 +997,8 @@ This can be used by `mpvi-open-from-favors' to quick open video."
     (define-key map (kbd "SPC") #'mpvi-seeking-pause)
     (define-key map (kbd "o")   #'mpvi-current-playing-open-externally)
     (define-key map (kbd "C-o") #'mpvi-current-playing-open-externally)
-    (define-key map (kbd "q")   #'minibuffer-keyboard-quit)
-    (define-key map (kbd "C-q") #'minibuffer-keyboard-quit)
+    (define-key map (kbd "q")   #'abort-minibuffers)
+    (define-key map (kbd "C-q") #'abort-minibuffers)
     map))
 
 (defvar mpvi-seek-annotation-alist
@@ -1049,7 +1050,7 @@ PROMPT is used if non-nil for `minibuffer-prompt'."
                 (minibuffer-with-setup-hook
                     (lambda ()
                       (add-hook 'after-change-functions
-                                (lambda (start end old-len)
+                                (lambda (start end _)
                                   (when (or (not (string-match-p "^[0-9]+\\.?[0-9]*$" (buffer-substring start end)))
                                             (not (<= 0 (string-to-number (minibuffer-contents)) (mpvi-prop 'duration))))
                                     (delete-region start end)))
@@ -1285,7 +1286,7 @@ Default handle current video at point."
   (if (mpvi-url-p path)
       (let ((playlist (mpvi-extract-playlist
                        (intern (concat ":" (url-host (url-generic-parse-url path)))) path t))
-            choosen desc)
+            choosen)
         (when playlist
           (setq choosen
                 (completing-read "Choose from playlist: "
@@ -1361,6 +1362,7 @@ Default handle current video at point."
 ;;;###autoload
 (defun mpvi-org-link-init ()
   "Setup org link with `mpv' prefix."
+  (require 'org)
   (set-keymap-parent mpvi-org-link-map org-mouse-map)
   (org-link-set-parameters "mpv"
                            :face mpvi-org-link-face
@@ -1373,8 +1375,8 @@ Default handle current video at point."
 
 ;;; Miscellaneous
 
-(require 'mpvi-ps) ; optional platform specialized config
-
 (provide 'mpvi)
+
+(require 'mpvi-ps) ; optional platform specialized config
 
 ;;; mpvi.el ends here

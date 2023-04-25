@@ -4,7 +4,6 @@
 
 ;; Author: lorniu <lorniu@gmail.com>
 ;; URL: https://github.com/lorniu/mpvi
-;; Package-Requires: ((emacs "28.1"))
 ;; SPDX-License-Identifier: MIT
 ;; Version: 1.0
 
@@ -23,6 +22,7 @@
 ;;; Code:
 
 (require 'json)
+(require 'mpvi)
 
 (defvar mpvi-danmaku2ass-args "--protect 80  -ds 5.0  -dm 10.0  --font \"Lantinghei SC\"  --fontsize 37.0  --alpha 0.8  --size 960x768")
 
@@ -80,9 +80,10 @@ PLATFORM can be bili, douyu and so on, see `https://github.com/Borber/seam' for 
 (defvar mpvi-bilibili-extra-opts `((lavfi . "\"fps=60\"")
                                    (sub-ass-force-margins . "yes")))
 
-(defun mpvi-bilibili-add-begin-time-to-url (url ts)
-  "Add TS param to URL. Then open the result URL in browser will begin with TS instead of begin."
-  (format "%s%st=%s" url (if (string-match-p "\\?" url) "&" "?") ts))
+(defun mpvi-bilibili-add-begin-time-to-url (url timestart)
+  "Add param TIMESTART to URL.
+Then the opened URL in browser will begin from TIMESTART instead."
+  (format "%s%st=%s" url (if (string-match-p "\\?" url) "&" "?") timestart))
 
 (cl-defmethod mpvi-extract-url ((_ (eql :www.bilibili.com)) url &key urlonly)
   "Return mpv options with danmaku file as sub-file for bilibili URL.
@@ -119,7 +120,8 @@ For bilibili, url with `?p=NUM' suffix is not a playlist link."
     (let ((ret (mpvi-extract-url-by-seam 'douyu (match-string 1 url))))
       (list :url (car ret) :title (cadr ret) :logo "DouYu"))))
 
-(cl-defmethod mpvi-extract-playlist ((_ (eql :www.douyu.com)) &rest _)) ; skip check playlist
+(cl-defmethod mpvi-extract-playlist ((_ (eql :www.douyu.com)) &rest _)
+  "No need to check playlist for douyu link.")
 
 
 ;;; Douyin Living
@@ -130,7 +132,8 @@ For bilibili, url with `?p=NUM' suffix is not a playlist link."
     (let ((ret (mpvi-extract-url-by-seam 'douyin (match-string 1 url))))
       (list :url (car ret) :title (cadr ret) :logo "DouYin"))))
 
-(cl-defmethod mpvi-extract-playlist ((_ (eql :live.douyin.com)) &rest _)) ; skip check playlist
+(cl-defmethod mpvi-extract-playlist ((_ (eql :live.douyin.com)) &rest _)
+  "No need to check playlist for douyin living link.")
 
 (provide 'mpvi-ps)
 
