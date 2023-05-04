@@ -121,7 +121,7 @@ For bilibili, url with `?p=NUM' suffix is not a playlist link."
       (list :url (car ret) :title (cadr ret) :logo "DouYu"))))
 
 (cl-defmethod mpvi-extract-playlist ((_ (eql :www.douyu.com)) &rest _)
-  "No need to check playlist for douyu link.")
+  "No need to check playlist for douyu link." nil)
 
 
 ;;; Douyin Living
@@ -133,7 +133,7 @@ For bilibili, url with `?p=NUM' suffix is not a playlist link."
       (list :url (car ret) :title (cadr ret) :logo "DouYin"))))
 
 (cl-defmethod mpvi-extract-playlist ((_ (eql :live.douyin.com)) &rest _)
-  "No need to check playlist for douyin living link.")
+  "No need to check playlist for douyin living link." nil)
 
 (provide 'mpvi-ps)
 
