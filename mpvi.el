@@ -264,8 +264,14 @@ Alert user when not seekable when ARG not nil."
        (mpvi-async-cmd `(multiply speed ,(if (>= n 0) factor (/ -1 factor))))))
     (_ (mpvi-prop 'speed (read-from-minibuffer "Speed to: " n nil t)))))
 
-(cl-defun mpvi-play (path &optional (beg 0) end paused)
-  "Play PATH from BEG to END. Pause when PAUSED not-nil."
+(defcustom mpvi-post-play-cmds nil
+  "Command list let MPV process run after loading a file.
+See `emms-player-mpv-cmd' for syntax."
+  :type 'list)
+
+(cl-defun mpvi-play (path &optional (beg 0) end emms)
+  "Play PATH from BEG to END.
+EMMS is a flag that this is invoked from EMMS."
   (if (mpvi-url-p path)
       (unless (executable-find "yt-dlp")
         (user-error "You should have 'yt-dlp' installed to play remote url"))
@@ -277,8 +283,8 @@ Alert user when not seekable when ARG not nil."
         (mpvi-prop 'ab-loop-b (or end "no"))
         (mpvi-prop 'playback-time beg))
     ;; start and loadfile
-    (when (emms-player-mpv-proc-playing-p)
-      (emms-player-mpv-stop))
+    (message "Waiting %s..." path)
+    (if (emms-player-mpv-proc-playing-p) (ignore-errors (mpvi-pause t)))
     ;; If path is not the current playing, load it
     (let (logo title subfile opts cmds started)
       (when (mpvi-url-p path)
@@ -304,25 +310,30 @@ Alert user when not seekable when ARG not nil."
                  `(sub-file . ,(format "\"%s\"" subfile)))
               ,@opts))
       (mpvi-log "load opts: %S" opts)
-      (message "Waiting %s..." path)
-      (let* ((done (lambda (&rest _)
-                     (if started (funcall started)
-                       (message "Started%s" (if title
-                                                (concat
-                                                 (if logo (concat "/" logo)) ": "
-                                                 (propertize title 'face 'font-lock-keyword-face))
-                                              ".")))))
-             (lst `(((set_property speed 1))
+      (let* ((lst `(((set_property speed 1))
+                    ((set_property pause no))
+                    ((set_property keep-open ,(if emms 'no 'yes)))
                     ((loadfile ,path replace
                                ,(mapconcat (lambda (x)
                                              (format "%s=%s" (car x) (cdr x)))
-                                           (delq nil opts) ",")))
-                    ,@(cl-loop for c in cmds collect (list c))
-                    ((set_property pause ,(or paused 'no)) . ,done))))
-        (let* ((play-cmd (cons 'batch (delq nil lst)))
-               (start-func (apply-partially #'mpvi-async-cmd play-cmd)))
-          (mpvi-log "load-commands: %S" play-cmd)
-          (funcall start-func)))))
+                                           (delq nil opts) ","))
+                     . ,(lambda (_ err)
+                          (if err
+                              (user-error "Load video failed (%S)" err)
+                            (if started
+                                (funcall started)
+                              (message "Started%s"
+                                       (if title
+                                           (concat (if logo (concat "/" logo)) ": "
+                                                   (propertize title 'face 'font-lock-keyword-face))
+                                         "."))))))
+                    ,@(cl-loop for c in `(,@cmds ,@mpvi-post-play-cmds)
+                               if (car-safe (car c)) collect c
+                               else collect (list c))))
+             (cmd (cons 'batch (delq nil lst))))
+        (mpvi-log "load-commands: %S" cmd)
+        (if (and emms (emms-player-mpv-proc-playing-p)) (emms-player-mpv-stop))
+        (mpvi-async-cmd cmd))))
   (push path mpvi-play-history))
 
 ;; Timestamp Link
@@ -844,7 +855,7 @@ JSON-DATA is argument."
                      (list (concat "--playlist=" track-name))
                    (list "--" track-name)))
           (emms-player-started emms-player-mpv))
-      (let ((start-func (lambda () (mpvi-play track-name)))) ; change this
+      (let ((start-func (lambda () (mpvi-play track-name nil nil t)))) ; <- change this
         (if (and (not (eq system-type 'windows-nt)) ; pity, auto switch next not working on Windows
                  emms-player-mpv-ipc-stop-command)
             (setq emms-player-mpv-ipc-stop-command start-func)
