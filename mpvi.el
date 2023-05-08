@@ -11,21 +11,19 @@
 
 ;;; Commentary:
 ;;
-;; Integrate MPV, EMMS, Org and others with Emacs, make watching videos conveniently
-;; and taking notes easily. Make EMMS support Windows.
+;; Integrate MPV, EMMS, Org and others with Emacs, make watching videos
+;; conveniently and taking notes easily. Make EMMS support Windows.
 ;;
 ;; Installation:
 ;;  - Install `emms' from elpa
 ;;  - Download and add this repo to your `load-path', then \\=(require 'mpvi)
-;;  - Install the dependencies: `mpv' (required), `yt-dlp', `ffmpeg', `seam', `danmaku2ass', `tesseract'
+;;  - Install the dependencies: `mpv' (required), `yt-dlp', `ffmpeg', `seam',
+;;   `danmaku2ass' and `tesseract'
 ;;
-;; Use `mpvi-open' to open a video, then control the MPV with `mpvi-seek'. Also you can play videos from `emms'.
+;; Use `mpvi-open' to open a video, then control the MPV with `mpvi-seek'.
+;; Also you can play videos from `emms'.
 ;;
 ;; For more information, see README file.
-;;
-;; References:
-;;  - https://mpv.io/manual/master/#properties
-;;  - https://kitchingroup.cheme.cmu.edu/blog/2016/11/04/New-link-features-in-org-9/
 
 ;;; Code:
 
@@ -60,6 +58,21 @@
 (defvar mpvi-local-video-handler #'mpvi-convert-by-ffmpeg)
 
 (defvar mpvi-remote-video-handler #'mpvi-ytdlp-download)
+
+;; Silence compiler
+
+(defvar org-attach-method)
+(defvar org-mouse-map)
+(declare-function org-link-set-parameters   "org.el" t t)
+(declare-function org-open-at-point         "org.el" t t)
+(declare-function org-insert-item           "org.el" t t)
+(declare-function org-at-item-p             "org.el" t t)
+(declare-function org-display-inline-images "org.el" t t)
+(declare-function org-attach-attach         "org.el" t t)
+(declare-function org-timer-secs-to-hms     "org.el" t t)
+(declare-function org-timer-fix-incomplete  "org.el" t t)
+(declare-function org-timer-hms-to-secs     "org.el" t t)
+(declare-function org-element-context       "org.el" t t)
 
 ;; Helpers
 
@@ -136,7 +149,7 @@ When GROUPP not nil then try to insert commas to string for better reading."
                 (/ (truncate (* 100 secs)) (float 100))))))
     (when groupp
       (while (string-match "\\(.*[0-9]\\)\\([0-9][0-9][0-9].*\\)" ret)
-	    (setq ret (concat (match-string 1 ret) "," (match-string 2 ret)))))
+        (setq ret (concat (match-string 1 ret) "," (match-string 2 ret)))))
     ret))
 
 ;; MPV
@@ -417,7 +430,7 @@ there is a different path at point."
   "Save IMAGE-FILE data to system clipboard.
 I don't know whether better solutions exist."
   (if (and mpvi-clipboard-command (file-exists-p image-file))
-      (let ((command (format mpvi-clipboard-command image-file)))
+      (let ((command (format mpvi-clipboard-command (shell-quote-argument image-file))))
         (mpvi-log "Copy image to clipboard: %s" command)
         (shell-command command))
     (user-error "Nothing to do with copy image file")))
@@ -822,7 +835,7 @@ JSON-DATA is argument."
 (defun mpvi-emms-player-started (player)
   "Advice for `emms-player-started', PLAYER is the current player."
   (setq emms-player-playing-p player
-	    emms-player-paused-p nil)
+        emms-player-paused-p nil)
   (when (emms-playlist-current-selected-track) ; add this
     (run-hooks 'emms-player-started-hook)))
 
