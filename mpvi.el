@@ -294,7 +294,8 @@ EMMS is a flag that this is invoked from EMMS."
       (when (mpvi-seekable)
         (mpvi-prop 'ab-loop-a (if end beg "no"))
         (mpvi-prop 'ab-loop-b (or end "no"))
-        (mpvi-prop 'playback-time beg))
+        (mpvi-prop 'playback-time beg)
+        (mpvi-prop 'pause 'no))
     ;; start and loadfile
     (message "Waiting %s..." path)
     (if (emms-player-mpv-proc-playing-p) (ignore-errors (mpvi-pause t)))
@@ -324,7 +325,6 @@ EMMS is a flag that this is invoked from EMMS."
               ,@opts))
       (mpvi-log "load opts: %S" opts)
       (let* ((lst `(((set_property speed 1))
-                    ((set_property pause no))
                     ((set_property keep-open ,(if emms 'no 'yes)))
                     ((loadfile ,path replace
                                ,(mapconcat (lambda (x)
@@ -332,22 +332,23 @@ EMMS is a flag that this is invoked from EMMS."
                                            (delq nil opts) ","))
                      . ,(lambda (_ err)
                           (if err
-                              (user-error "Load video failed (%S)" err)
+                              (message "Load video failed (%S)" err)
                             (if started
                                 (funcall started)
                               (message "Started%s"
                                        (if title
                                            (concat (if logo (concat "/" logo)) ": "
                                                    (propertize title 'face 'font-lock-keyword-face))
-                                         "."))))))
+                                         ".")))
+                            (push path mpvi-play-history))))
+                    ((set_property pause no))
                     ,@(cl-loop for c in `(,@cmds ,@mpvi-post-play-cmds)
                                if (car-safe (car c)) collect c
                                else collect (list c))))
              (cmd (cons 'batch (delq nil lst))))
         (mpvi-log "load-commands: %S" cmd)
         (if (and emms (emms-player-mpv-proc-playing-p)) (emms-player-mpv-stop))
-        (mpvi-async-cmd cmd))))
-  (push path mpvi-play-history))
+        (mpvi-async-cmd cmd)))))
 
 ;; Timestamp Link
 
