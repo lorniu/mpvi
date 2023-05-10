@@ -1351,9 +1351,21 @@ Default handle current video at point."
 (defvar mpvi-org-link-face '(:inherit org-link :underline nil :box (:style flat-button)))
 
 (defun mpvi-org-link-push (link)
-  "Play this LINK."
+  "Play the mpv LINK."
   (pcase-let ((`(,path ,beg ,end) (mpvi-parse-link link)))
     (mpvi-play path beg end)))
+
+(defcustom mpvi-org-https-link-rules nil
+  "Rules to check if current https link should be opened with MPV.
+One rule is a regexp string to check against link url."
+  :type '(repeat string))
+
+(defun mpvi-org-https-link-push (url arg)
+  "Play the normal https URL with MPV if it matches any of the rules.
+ARG is the argument."
+  (if (cl-find-if (lambda (r) (string-match-p r url)) mpvi-org-https-link-rules)
+      (mpvi-open (concat "https:" url))
+    (browse-url (concat "https:" url) arg)))
 
 (defun mpvi-current-link-seek ()
   "Seek position for this link."
@@ -1392,7 +1404,9 @@ Default handle current video at point."
   (org-link-set-parameters "mpv"
                            :face mpvi-org-link-face
                            :keymap mpvi-org-link-map
-                           :follow #'mpvi-org-link-push))
+                           :follow #'mpvi-org-link-push)
+  (org-link-set-parameters "https"
+                           :follow #'mpvi-org-https-link-push))
 
 ;;;###autoload
 (eval-after-load 'org '(mpvi-org-link-init))
