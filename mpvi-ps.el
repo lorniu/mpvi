@@ -24,26 +24,38 @@
 (require 'json)
 (require 'mpvi)
 
+(defvar mpvi-danmaku2ass "danmaku2ass"
+  "Executable command or path of `danmaku2ass'.
+It can be executable danmaku2ass command or path of danmaku2ass.py.")
+
 (defvar mpvi-danmaku2ass-args "--protect 80  -ds 5.0  -dm 10.0  --font \"Lantinghei SC\"  --fontsize 37.0  --alpha 0.8  --size 960x768")
+
+(defun mpvi-check-danmaku2ass ()
+  "Check if `danmaku2ass' available."
+  (or (executable-find mpvi-danmaku2ass)
+      (and (string-suffix-p ".py" mpvi-danmaku2ass) (file-exists-p mpvi-danmaku2ass))
+      (user-error "Please config `mpvi-danmaku2ass' for danmaku2ass command or path first")))
 
 (defun mpvi-convert-danmaku2ass (danmaku-file &optional confirm)
   "Convert DANMAKU-FILE to ASS format.
 If CONFIRM not nil then prompt user the options."
-  (interactive (list (read-file-name "Danmaku file: " mpvi-cache-directory nil t) t))
-  (unless (executable-find "danmaku2ass")
-    (user-error "You should have 'danmaku2ass' installed to convert danmaku"))
+  (interactive (list (and (mpvi-check-danmaku2ass)
+                          (read-file-name "Danmaku file: " mpvi-cache-directory nil t) t)))
+  (mpvi-check-danmaku2ass)
   (unless (file-regular-p danmaku-file)
     (user-error "Danmaku file '%s' not valid" danmaku-file))
   (let* ((dest (concat (file-name-sans-extension danmaku-file) ".ass"))
+         (file (file-truename danmaku-file))
          (options (concat "-o \"" dest "\"  " mpvi-danmaku2ass-args)))
     (when confirm
       (setq options (read-string "Confirm options for danmaku2ass: " options)))
+    (setq options (split-string-and-unquote options))
     (with-temp-buffer
       (mpvi-log "Convert danmaku to ass format for %s" danmaku-file)
-      (apply #'mpvi-call-process
-             "danmaku2ass"
-             (file-truename danmaku-file)
-             (split-string-and-unquote options))
+      (if (executable-find mpvi-danmaku2ass)
+          (apply #'mpvi-call-process mpvi-danmaku2ass file options)
+        (apply #'mpvi-call-process
+               "python3" mpvi-danmaku2ass file options))
       (if (file-exists-p dest)
           (prog1 dest
             (when (called-interactively-p 'any)
@@ -89,7 +101,7 @@ Then the opened URL in browser will begin from TIMESTART instead."
   "Return mpv options with danmaku file as sub-file for bilibili URL.
 If URLONLY is not nil, don't resolve danmaku file."
   (let (ret)
-    (when (and mpvi-bilibili-enable-danmaku (not urlonly))
+    (when (and (not urlonly) mpvi-bilibili-enable-danmaku (mpvi-check-danmaku2ass))
       (condition-case err
           ;; danmaku.xml -> danmaku.ass
           (let ((sub (mpvi-convert-danmaku2ass (mpvi-ytdlp-download-subtitle url) current-prefix-arg)))
