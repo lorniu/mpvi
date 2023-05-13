@@ -1239,16 +1239,20 @@ If any, prompt user to choose one video in playlist to play."
   (interactive)
   (mpvi-check-live)
   (if-let ((path (mpvi-origin-path)))
-      (if (y-or-n-p (format "Open '%s' externally?" path))
-          (let ((msg "Open in system program done."))
-            ;; add begin time for url if necessary
-            (when-let (f (plist-get mpvi-current-url-metadata :out-url-decorator))
-              (setq path (funcall f path (mpvi-prop 'playback-time))))
-            (browse-url path)
-            (setq mpvi-seek-paused t)
-            (condition-case nil (throw 'mpvi-seek msg)
-              (error (message msg))))
-        (message ""))
+      (let ((called-from-seek (> (recursion-depth) 0)))
+        (if (or (not called-from-seek)
+                (y-or-n-p (format "Open '%s' externally?" path)))
+            (let ((msg "Open in system program done."))
+              ;; add begin time for url if necessary
+              (when-let (f (plist-get mpvi-current-url-metadata :out-url-decorator))
+                (setq path (funcall f path (mpvi-prop 'playback-time))))
+              (browse-url path)
+              (if called-from-seek
+                  (progn (setq mpvi-seek-paused t)
+                         (throw 'mpvi-seek msg))
+                (mpvi-pause t)
+                (message msg)))
+          (message "")))
     (user-error "No playing path found")))
 
 ;; [others]
