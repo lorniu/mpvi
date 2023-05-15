@@ -32,7 +32,7 @@
 (require 'emms-player-mpv)
 
 (defgroup mpvi nil
-  "Integrated Video Tool on Emacs via MPV."
+  "Integrate MPV with Emacs."
   :group 'external
   :prefix 'mpvi-)
 
@@ -1418,8 +1418,8 @@ ARG is the argument."
 
 ;;; Miscellaneous
 
-(provide 'mpvi)
-
 (require 'mpvi-ps) ; optional platform specialized config
+
+(provide 'mpvi)
 
 ;;; mpvi.el ends here

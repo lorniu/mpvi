@@ -22,7 +22,17 @@
 ;;; Code:
 
 (require 'json)
-(require 'mpvi)
+(require 'cl-lib)
+
+(defvar mpvi-cache-directory)
+
+(declare-function mpvi-log "mpvi" t)
+(declare-function mpvi-call-process "mpvi" t)
+(declare-function mpvi-extract-playlist "mpvi" t)
+(declare-function mpvi-ytdlp-download-subtitle "mpvi" t)
+
+
+;;; Utils
 
 (defvar mpvi-danmaku2ass "danmaku2ass"
   "Executable command or path of `danmaku2ass'.
