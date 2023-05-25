@@ -742,7 +742,7 @@ JSON-STRING is json format string return by ipc process."
         (setq json (json-read-from-string json-string))
       ;; PowerShell will output error message when something goes wrong to standard output,
       ;; It's not json format, so catch it here
-      (error (erase-buffer) (user-error "ERR: %S" err)))
+      (error (erase-buffer) (user-error "ERR in IPC-RECV: %s\n------\n%s" err json-string)))
     (let ((rid (alist-get 'request_id json)))
       (when (and rid (not (alist-get 'command json))) ; skip the echoed 'command' for Windows
         (emms-player-mpv-ipc-req-resolve
