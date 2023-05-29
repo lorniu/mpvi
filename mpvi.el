@@ -1229,6 +1229,7 @@ If any, prompt user to choose one video in playlist to play."
   (mpvi-check-live)
   (cl-assert (file-regular-p subfile))
   (when (string-suffix-p ".danmaku.xml" subfile) ; bilibili
+    (require 'mpvi-ps)
     (setq subfile (mpvi-convert-danmaku2ass subfile 'confirm)))
   (ignore-errors (mpvi-async-cmd `(sub-remove)))
   (mpvi-async-cmd `(sub-add ,subfile))
