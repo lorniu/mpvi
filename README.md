@@ -1,4 +1,7 @@
-# Integrated MPV Tool on Emacs
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![MELPA](https://melpa.org/packages/mpvi-badge.svg)](https://melpa.org/#/mpvi)
+
+# Integrated Video Tool on Emacs
 
 Knock knock, [English Help](README-en.md).
 
@@ -11,6 +14,9 @@ Knock knock, [English Help](README-en.md).
 - 通过 Timestamp Link 跟 Org Mode 深度集成，视频笔记、轻松愉快
 - 为 EMMS 增加 Windows 支持。可通过 EMMS 管理、播放视频
 
+辅助项目:
+- https://github.com/lorniu/bilibili.el
+
 类似项目:
 - https://github.com/kljohann/mpv.el
 - https://github.com/yuchen-lea/org-media-note
@@ -22,7 +28,9 @@ Knock knock, [English Help](README-en.md).
 
 ## 安装
 
-基于 [EMMS](https://www.gnu.org/software/emms/)，请确保其已安装。然后下载本仓库，加入到 `load-path`，并 `(require 'mpvi)`。
+基于 [EMMS](https://www.gnu.org/software/emms/)，请确保其已安装。然后下载并加载本包 `(require 'mpvi)`。
+
+
 
 之后安装相关依赖。除了 [mpv](https://mpv.io/) 是必须的外，其他的是可选的:
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp)，如果要看网络视频，这个必须要安装
@@ -79,7 +87,7 @@ winget install mpv yt-dlp ffmpeg Tesseract-OCR
 - 目前直播仅支持斗鱼和抖音。其他的可以仿照 `mpvi-ps.el` 中的代码自行扩展。我不看其他的，所以没加
 - 最大的遗憾是，看直播的时候没弹幕。**这种实时弹幕，不知道有没有啥实现的思路**
 - 本来想把 `danmaku2ass` 和解析直播链接也用 `elisp` 重新实现一下的。后面想想这简直是自寻烦恼，这种洁癖要不得，第三方的依赖不差这一两个，因此作罢
-- 结合视频网站的 API 可以实时抓取其收藏夹、热门视频等，结合本包食用，特别香；通过 EMMS 对视频列表进行管理，特别方便；再结合 Org Mode 对视频进行分类、整理，更香；再加上带视频时间戳链接的笔记，完美。现在基本可以做到不打开网页看 B 站视频了
+- 结合视频网站的 API 可以实时抓取其收藏夹、热门视频等，结合本包食用，特别香；通过 EMMS 对视频列表进行管理，特别方便；再结合 Org Mode 对视频进行分类、整理，更香；再加上带视频时间戳链接的笔记，完美。现在基本可以做到不打开网页看 B 站视频了 (https://github.com/lorniu/bilibili.el)
 - 最近 B 站改版了电影页面，所以电影暂时是看不了的。等待上游补丁 (https://github.com/yt-dlp/yt-dlp/pull/6022)
 
 ## 其他

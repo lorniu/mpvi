@@ -1,4 +1,7 @@
-# Integrated MPV Tool on Emacs
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![MELPA](https://melpa.org/packages/mpvi-badge.svg)](https://melpa.org/#/mpvi)
+
+# Integrated Video Tool on Emacs
 
 What can do:
 - Watch local, remote and living videos (danmaku support for some)
@@ -17,7 +20,7 @@ I just wrote this for fun. Now release it for the ones who need it.
 ## Installation
 
 - It's based on [EMMS](https://www.gnu.org/software/emms/), make sure it is installed
-- Download and add this repo to your `load-path`, then `(require 'mpvi)`
+- Download and load this package `(require 'mpvi)`
 - Install [mpv](https://mpv.io/) and [yt-dlp](https://github.com/yt-dlp/yt-dlp), they are the main dependencies.
 - [Optional] Install dependencies you need:
   + [ffmpeg](https://ffmpeg.org/), used to clip video
@@ -76,4 +79,4 @@ Thanks to similar projects in the community, you teach me a lot and give me so m
 
 Thanks to open source software like MPV/FFMPEG/EMACS, you make the world more wonderful.
 
-Finally, thanks to all the platforms and authors who contributed great videos, you guys make me happier and stronger. :)
+Finally, thanks to all the platforms and authors who contributed great videos, you guys make me happier and more powerful. :)

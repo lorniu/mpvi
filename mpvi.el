@@ -1,4 +1,4 @@
-;;; mpvi.el --- Integrated MPV Tool -*- lexical-binding: t -*-
+;;; mpvi.el --- Integrated video tool based on EMMS and MPV -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2023 lorniu <lorniu@gmail.com>
 
@@ -16,9 +16,8 @@
 ;;
 ;; Installation:
 ;;  - Install `emms' from elpa
-;;  - Download and add this repo to your `load-path', then \\=(require 'mpvi)
-;;  - Install the dependencies: `mpv' (required), `yt-dlp', `ffmpeg', `seam',
-;;   `danmaku2ass' and `tesseract'
+;;  - Install `mpvi' from melpa, then load it
+;;  - Install the dependencies: mpv (required), yt-dlp, ffmpeg, seam, danmaku2ass and tesseract
 ;;
 ;; Use `mpvi-open' to open a video, then control the MPV with `mpvi-seek'.
 ;; Also you can play videos from `emms'.

@@ -1,4 +1,4 @@
-;;; mpvi-ps.el --- Integrated MPV Tool -*- lexical-binding: t -*-
+;;; mpvi-ps.el --- Integrated video tool based on EMMS and MPV -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2023 lorniu <lorniu@gmail.com>
 
