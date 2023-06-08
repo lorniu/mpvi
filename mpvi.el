@@ -281,14 +281,15 @@ Alert user when not seekable when ARG not nil."
 See `emms-player-mpv-cmd' for syntax."
   :type 'list)
 
-(cl-defun mpvi-play (path &optional (beg 0) end emms)
+(cl-defun mpvi-play (path &optional (beg 0) end emms noseek)
   "Play PATH from BEG to END.
-EMMS is a flag that this is invoked from EMMS."
+EMMS is a flag that this is invoked from EMMS.
+When NOSEEK is not nil then dont try to seek but open directly."
   (if (mpvi-url-p path)
       (unless (executable-find "yt-dlp")
         (user-error "You should have 'yt-dlp' installed to play remote url"))
     (setq path (expand-file-name path)))
-  (if (and (emms-player-mpv-proc-playing-p) (equal path (mpvi-origin-path)))
+  (if (and (not noseek) (emms-player-mpv-proc-playing-p) (equal path (mpvi-origin-path)))
       ;; when path is current playing, just seek to position
       (when (mpvi-seekable)
         (mpvi-prop 'ab-loop-a (if end beg "no"))
@@ -1218,7 +1219,7 @@ If any, prompt user to choose one video in playlist to play."
            (playlist-index (plist-get mpvi-current-url-metadata :playlist-index))
            (msg "Switch done."))
       (condition-case nil
-          (throw 'mpvi-seek (prog1 msg (mpvi-play playlist)))
+          (throw 'mpvi-seek (prog1 msg (mpvi-play playlist nil nil nil t)))
         (error (message msg)))
     (user-error "No playlist found for current playing url")))
 
