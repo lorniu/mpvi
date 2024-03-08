@@ -218,8 +218,14 @@ Return list of (index-or-title playlist-items)."
   "Check if MPV is runing."
   (unless (emms-player-mpv-proc-playing-p)
     (user-error "No living MPV found"))
-  (unless (eq emms-player-mpv-ipc-method 'ipc-server)
-    (user-error "You should update MPV to support ipc connect")))
+  (with-temp-buffer
+    (unless (and (zerop (call-process emms-player-mpv-command-name nil '(t t) nil "--version"))
+                 (progn (goto-char (point-min)) (re-search-forward "^mpv\\s-+v?\\(\\([0-9]+\\.?\\)+\\)" nil t 1))
+                 (string> (mapconcat (lambda (n) (format "%03d" n))
+                                     (seq-map 'string-to-number (split-string (match-string-no-properties 1) "\\." t))
+                                     ".")
+                          "000.016.999"))
+      (user-error "You should update MPV to support ipc connect"))))
 
 (defun mpvi-origin-path (&optional path)
   "Reverse of `mpvi-extract-url', return the origin url for PATH.
@@ -857,23 +863,11 @@ JSON-DATA is argument."
   (setq emms-player-mpv-stopped nil)
   (emms-player-mpv-proc-playing nil)
   (let ((track-name (emms-track-get track 'name))
-        (track-playlist-option
-         (and emms-player-mpv-use-playlist-option
-              (memq (emms-track-get track 'type)
-                    '(streamlist playlist)))))
-    (if (emms-player-mpv-ipc-fifo-p)
-        (progn ;; ipc-stop is to clear any buffered commands
-          (emms-player-mpv-ipc-stop)
-          (apply #'emms-player-mpv-proc-init
-                 (if track-playlist-option
-                     (list (concat "--playlist=" track-name))
-                   (list "--" track-name)))
-          (emms-player-started emms-player-mpv))
-      (let ((start-func (lambda () (mpvi-play track-name nil nil t)))) ; <- change this
-        (if (and (not (eq system-type 'windows-nt)) ; pity, auto switch next not working on Windows
-                 emms-player-mpv-ipc-stop-command)
-            (setq emms-player-mpv-ipc-stop-command start-func)
-          (funcall start-func))))))
+        (start-func (lambda () (mpvi-play track-name nil nil t)))) ; <- change this
+    (if (and (not (eq system-type 'windows-nt)) ; pity, auto switch next not working on Windows
+             emms-player-mpv-ipc-stop-command)
+        (setq emms-player-mpv-ipc-stop-command start-func)
+      (funcall start-func))))
 
 ;; Minor mode
 
