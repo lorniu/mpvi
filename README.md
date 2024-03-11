@@ -1,26 +1,21 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![MELPA](https://melpa.org/packages/mpvi-badge.svg)](https://melpa.org/#/mpvi)
 
-# Integrated Video Tool on Emacs
+# Media Tool based on EMMS and MPV
 
 Knock knock, [English Help](README-en.md).
 
 ## 简介
 
 将 MPV 跟 EMMS/ffmpeg/yt-dlp/Org-Mode 等有机结合，娱乐、学习两不误:
-- 支持本地视频、网络视频、网络直播 (对 B 站等有弹幕支持)
-- 可以灵活地对视频的播放进度、速度等进行控制 (基于 MiniBuffer)
-- 可以方便地对视频进行下载、转码、截图、OCR 等相关操作
-- 通过 Timestamp Link 跟 Org Mode 深度集成，视频笔记、轻松愉快
-- 为 EMMS 增加 Windows 支持。可通过 EMMS 管理、播放视频
+- 支持本地视频、网络视频、网络直播 (也支持音频、弹幕)
+- 可以在 Emacs 中灵活地控制播放进度、播放速度等
+- 可以方便地对视频进行下载、转码、截图、OCR 等操作
+- 跟 Org Mode 深度集成，视频笔记、轻轻松松 (带时间戳的链接)
+- 可以控制 EMMS 播放的视频和音频。为 EMMS 增加了 Windows 平台的支持
 
-辅助项目:
+结合下面项目可以更方便观看 B 站视频:
 - https://github.com/lorniu/bilibili.el
-
-类似项目:
-- https://github.com/kljohann/mpv.el
-- https://github.com/yuchen-lea/org-media-note
-- https://github.com/bpanthi977/org-mpv-notes
 
 这是很久之前知识焦虑的时候，为了消化收藏夹中的视频而写。
 
@@ -29,7 +24,6 @@ Knock knock, [English Help](README-en.md).
 ## 安装
 
 基于 [EMMS](https://www.gnu.org/software/emms/)，请确保其已安装。然后下载并加载本包 `(require 'mpvi)`。
-
 
 
 之后安装相关依赖。除了 [mpv](https://mpv.io/) 是必须的外，其他的是可选的:
@@ -88,7 +82,6 @@ winget install mpv yt-dlp ffmpeg Tesseract-OCR
 - 最大的遗憾是，看直播的时候没弹幕。**这种实时弹幕，不知道有没有啥实现的思路**
 - 本来想把 `danmaku2ass` 和解析直播链接也用 `elisp` 重新实现一下的。后面想想这简直是自寻烦恼，这种洁癖要不得，第三方的依赖不差这一两个，因此作罢
 - 结合视频网站的 API 可以实时抓取其收藏夹、热门视频等，结合本包食用，特别香；通过 EMMS 对视频列表进行管理，特别方便；再结合 Org Mode 对视频进行分类、整理，更香；再加上带视频时间戳链接的笔记，完美。现在基本可以做到不打开网页看 B 站视频了 (https://github.com/lorniu/bilibili.el)
-- 最近 B 站改版了电影页面，所以电影暂时是看不了的。等待上游补丁 (https://github.com/yt-dlp/yt-dlp/pull/6022)
 
 ## 其他
 
@@ -100,4 +93,4 @@ winget install mpv yt-dlp ffmpeg Tesseract-OCR
 
 感谢 mpv/ffmpeg/emacs 等开源软件，你们让世界更美好。
 
-最后，感谢所有贡献了优秀视频的平台和作者，你们让我更焦虑、也更强大（误）。
+最后，感谢所有贡献了优秀视频的平台和作者，你们让我更焦虑、也更强大（~~误~~）。

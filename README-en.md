@@ -1,19 +1,14 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![MELPA](https://melpa.org/packages/mpvi-badge.svg)](https://melpa.org/#/mpvi)
 
-# Integrated Video Tool on Emacs
+# Media Tool based on EMMS and MPV
 
 What can do:
-- Watch local, remote and living videos (danmaku support for some)
+- Watch local, remote and living media (danmaku support for some)
 - Manage playlist with EMMS, and control playing with MiniBuffer
 - Integrate Download/Clip/Screenshot/OCR videos and so on
 - Integrated with Org Mode, make taking video-notes easily
 - Make MPV player in EMMS support Windows
-
-Similar projects
-- https://github.com/kljohann/mpv.el
-- https://github.com/yuchen-lea/org-media-note
-- https://github.com/bpanthi977/org-mpv-notes
 
 I just wrote this for fun. Now release it for the ones who need it.
 
