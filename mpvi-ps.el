@@ -5,7 +5,7 @@
 ;; Author: lorniu <lorniu@gmail.com>
 ;; URL: https://github.com/lorniu/mpvi
 ;; SPDX-License-Identifier: MIT
-;; Version: 1.0
+;; Version: 1.1
 
 ;;; Commentary:
 

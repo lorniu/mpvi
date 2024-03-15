@@ -7,7 +7,7 @@
 ;; Package-Requires: ((emacs "28.1") (emms "11"))
 ;; Keywords: convenience, docs, multimedia, application
 ;; SPDX-License-Identifier: MIT
-;; Version: 1.0
+;; Version: 1.1
 
 ;;; Commentary:
 ;;
