@@ -126,7 +126,7 @@ DEFAULT-NAME is used when only get a directory name."
          (user-error "This is not a valid time: %s" time))
         ((cl-find ?: time)
          (+ (org-timer-hms-to-secs (org-timer-fix-incomplete time))
-            (if-let (p (cl-search "." time)) (string-to-number (cl-subseq time p)) 0)))
+            (if-let* ((p (cl-search "." time))) (string-to-number (cl-subseq time p)) 0)))
         (t (string-to-number time))))
 
 (defun mpvi-secs-to-hms (secs &optional full truncate)
@@ -173,9 +173,9 @@ if it's nil then this method will be a dispatcher."
                (if (and playlist (null (car playlist))) ; when no selected-index, return all items in playlist
                    (list :playlist-url url :playlist-items (cdr playlist))
                  (let ((purl (if playlist (nth (car playlist) (cdr playlist)))) ret)
-                   (if-let ((dest (apply #'mpvi-extract-url  ; dispatch to method
-                                         (funcall typefn (or purl url))
-                                         (or purl url) args)))
+                   (if-let* ((dest (apply #'mpvi-extract-url  ; dispatch to method
+                                          (funcall typefn (or purl url))
+                                          (or purl url) args)))
                        (progn (setq ret dest)
                               (unless (plist-get ret :url)
                                 (plist-put ret :url (or purl url))))
@@ -205,7 +205,7 @@ Return list of (index-or-title playlist-items)."
                                   for item = (if (member url mpvi-play-history) (propertize url 'face mpvi-annotation-face) url)
                                   collect (propertize item 'line-prefix (propertize (format "%2d. " i) 'face mpvi-annotation-face))))
                           (item (completing-read
-                                 (concat "Playlist" (if-let (title (alist-get 'title meta)) (format " (%s)" title))  ": ")
+                                 (concat "Playlist" (if-let* ((title (alist-get 'title meta))) (format " (%s)" title))  ": ")
                                  (lambda (input pred action)
                                    (if (eq action 'metadata)
                                        `(metadata (display-sort-function . ,#'identity))
@@ -308,7 +308,7 @@ When NOSEEK is not nil then dont try to seek but open directly."
     (let (logo title subfile opts cmds started)
       (when (mpvi-url-p path)
         ;; preprocessing url and extra mpv commands
-        (when-let ((ret (mpvi-extract-url nil path)))
+        (when-let* ((ret (mpvi-extract-url nil path)))
           (unless (plist-get ret :url) (user-error "Unknown url"))
           (setq mpvi-current-url-metadata ret)
           (setq path (or (plist-get ret :url) path))
@@ -624,7 +624,7 @@ Return (suggestion-save-name . video-format)."
            (format (if (string-prefix-p ">" format)
                        (cadr (assoc format fmts))
                      (string-trim (cl-subseq format 0 (cl-position ?\> format)))))
-           (ext (if-let ((fmt (cl-find-if (lambda (c) (equal (cadr c) format)) fmts)))
+           (ext (if-let* ((fmt (cl-find-if (lambda (c) (equal (cadr c) format)) fmts)))
                     (caddr fmt) "mp4")))
       (setq format (string-replace " " "" (string-replace "," "+" format)))
       (cons (concat name "_" format "." ext) format))))
@@ -962,7 +962,7 @@ Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
   (unless (consp mpvi-favor-paths)
     (user-error "You should add your favor paths into `mpvi-favor-paths' first"))
   (let* ((annfn (lambda (it)
-                  (when-let (s (alist-get it mpvi-favor-paths))
+                  (when-let* ((s (alist-get it mpvi-favor-paths)))
                     (format "    (%s)" s))))
          (path (completing-read "Choose video to play: "
                                 (lambda (input pred action)
@@ -1037,7 +1037,7 @@ Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
     (setq mpvi-seek-overlay ov)
     (if (mpvi-seekable)
         (condition-case nil
-            (let* ((hms (when-let (s (ignore-errors (mpvi-secs-to-hms (string-to-number (minibuffer-contents)))))
+            (let* ((hms (when-let* ((s (ignore-errors (mpvi-secs-to-hms (string-to-number (minibuffer-contents))))))
                           (funcall vf (format "%s  %.2f%% " s (mpvi-prop 'percent-pos)))))
                    (text (cl-loop for i in mpvi-seek-annotation-alist
                                   if (stringp (car i)) concat (concat (funcall kf (car i)) " " (funcall vf (eval (cdr i))))
@@ -1062,7 +1062,7 @@ PROMPT is used if non-nil for `minibuffer-prompt'."
     (mpvi-pause t)
     (mpvi-prop 'keep-open 'yes) ; dont close on end
     (unwind-protect
-        (when-let
+        (when-let*
             ((ret
               (catch 'mpvi-seek
                 (minibuffer-with-setup-hook
@@ -1165,7 +1165,7 @@ If NUM is not nil, go back that position first."
 (defun mpvi-seeking-copy-sub-text ()
   "Copy current sub text to kill ring."
   (interactive)
-  (when-let ((sub (ignore-errors (mpvi-prop 'sub-text))))
+  (when-let* ((sub (ignore-errors (mpvi-prop 'sub-text))))
     (kill-new sub)
     (throw 'mpvi-seek "Copied to kill ring, yank to the place you want.")))
 
@@ -1208,9 +1208,9 @@ If NUM is not nil, go back that position first."
 If any, prompt user to choose one video in playlist to play."
   (interactive)
   (mpvi-check-live)
-  (if-let ((playlist (plist-get mpvi-current-url-metadata :playlist-url))
-           (playlist-index (plist-get mpvi-current-url-metadata :playlist-index))
-           (msg "Switch done."))
+  (if-let* ((playlist (plist-get mpvi-current-url-metadata :playlist-url))
+            (playlist-index (plist-get mpvi-current-url-metadata :playlist-index))
+            (msg "Switch done."))
       (condition-case nil
           (throw 'mpvi-seek (prog1 msg (mpvi-play playlist nil nil nil t)))
         (error (message msg)))
@@ -1232,13 +1232,13 @@ If any, prompt user to choose one video in playlist to play."
   "Open current playing video PATH with system program."
   (interactive)
   (mpvi-check-live)
-  (if-let ((path (mpvi-origin-path)))
+  (if-let* ((path (mpvi-origin-path)))
       (let ((called-from-seek (> (recursion-depth) 0)))
         (if (or (not called-from-seek)
                 (y-or-n-p (format "Open '%s' externally?" path)))
             (let ((msg "Open in system program done."))
               ;; add begin time for url if necessary
-              (when-let (f (plist-get mpvi-current-url-metadata :out-url-decorator))
+              (when-let* ((f (plist-get mpvi-current-url-metadata :out-url-decorator)))
                 (setq path (funcall f path (mpvi-prop 'playback-time))))
               (browse-url path)
               (if called-from-seek
@@ -1261,7 +1261,7 @@ PROMPT is used in minibuffer when invoke `mpvi-seek'."
         (unless (mpvi-seekable)
           (user-error "Current video is not seekable, it makes no sense to insert timestamp link"))
         (mpvi-with-current-mpv-link (node path)
-          (when-let (ret (mpvi-seek (if node (plist-get node :vbeg)) prompt))
+          (when-let* ((ret (mpvi-seek (if node (plist-get node :vbeg)) prompt)))
             (mpvi-pause t)
             ;; if on a mpv link, update it
             (if node (delete-region (plist-get node :begin) (plist-get node :end))
@@ -1281,7 +1281,7 @@ PROMPT is used in minibuffer when invoke `mpvi-seek'."
   "Cut or convert video for PATH from BEG to END, save to TARGET.
 Default handle current video at point."
   (interactive
-   (if-let ((node (ignore-errors (mpvi-parse-link-at-point))))
+   (if-let* ((node (ignore-errors (mpvi-parse-link-at-point))))
        (let ((path (plist-get node :path)))
          (if (or (mpvi-url-p path) (file-exists-p path))
              (list path
@@ -1387,7 +1387,7 @@ ARG is the argument."
 (defun mpvi-current-link-show-preview ()
   "Show the preview tooltip for this link."
   (interactive)
-  (when-let ((node (mpvi-parse-link-at-point)))
+  (when-let* ((node (mpvi-parse-link-at-point)))
     (let* ((scr (funcall mpvi-screenshot-function (plist-get node :path) (plist-get node :vbeg)))
            (img (create-image scr nil nil :width 400))
            (help (propertize " " 'display img))
