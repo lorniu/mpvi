@@ -150,6 +150,24 @@ When GROUPP not nil then try to insert commas to string for better reading."
         (setq ret (concat (match-string 1 ret) "," (match-string 2 ret)))))
     ret))
 
+(defun mpvi-mpv-version ()
+  "Return the current mpv version as a cons cell."
+  (with-temp-buffer
+    (process-file "mpv" nil t "--version")
+    (goto-char (point-min))
+    (if (re-search-forward "v\\([0-9]+\\)\\.\\([0-9]+\\)" (line-end-position) t)
+        (cons (string-to-number (match-string 1))
+              (string-to-number (match-string 2)))
+      (user-error "No mpv version found"))))
+
+(defun mpvi-compare-mpv-version (comparefn version)
+  "Compare current mpv verion with the special VERSION through COMPAREFN.
+VERSION should be a cons cell, like \\='(0 38) representing version 0.38."
+  (let ((current (mpvi-mpv-version)))
+    (funcall comparefn
+             (+ (* (car current) 1000) (cdr current))
+             (+ (* (car version) 1000) (cdr version)))))
+
 ;; MPV
 
 (defvar mpvi-current-url-metadata nil)
@@ -329,23 +347,28 @@ When NOSEEK is not nil then dont try to seek but open directly."
                  `(sub-file . ,(format "\"%s\"" subfile)))
               ,@opts))
       (mpvi-log "load opts: %S" opts)
-      (let* ((lst `(((set_property speed 1))
+      (let* ((optstr (mapconcat (lambda (x)
+                                  (format "%s=%s" (car x) (cdr x)))
+                                (delq nil opts) ","))
+             (loadopts (if (ignore-errors (mpvi-compare-mpv-version #'< (cons 0 38)))
+                           (list optstr)
+                         (list -1 optstr)))
+             (loadhandler (lambda (_ err)
+                            (if err
+                                (message "Load video failed (%S)" err)
+                              (if started
+                                  (funcall started)
+                                (message "%s"
+                                         (if title
+                                             (concat (if logo (concat "/" logo)) ": "
+                                                     (propertize title 'face 'font-lock-keyword-face))
+                                           "")))
+                              (push path mpvi-play-history))))
+             (lst `(((set_property speed 1))
                     ((set_property keep-open ,(if emms 'no 'yes)))
-                    ((loadfile ,path replace
-                               ,(mapconcat (lambda (x)
-                                             (format "%s=%s" (car x) (cdr x)))
-                                           (delq nil opts) ","))
-                     . ,(lambda (_ err)
-                          (if err
-                              (message "Load video failed (%S)" err)
-                            (if started
-                                (funcall started)
-                              (message "Started%s"
-                                       (if title
-                                           (concat (if logo (concat "/" logo)) ": "
-                                                   (propertize title 'face 'font-lock-keyword-face))
-                                         ".")))
-                            (push path mpvi-play-history))))
+                    ;; Since mpv 0.38.0, an insertion index argument is added as the third argument
+                    ;; https://mpv.io/manual/master/#command-interface, loadfile
+                    ((loadfile ,path replace ,@loadopts) . ,loadhandler)
                     ((set_property pause no))
                     ,@(cl-loop for c in `(,@cmds ,@mpvi-post-play-cmds)
                                if (car-safe (car c)) collect c
