@@ -393,11 +393,13 @@ When NOSEEK is not nil then dont try to seek but open directly."
   "Return the mpv link object at point."
   (unless (derived-mode-p 'org-mode)
     (user-error "You must parse MPV link in org mode"))
-  (let ((node (cadr (org-element-context))))
+  (let* ((link (org-element-context))
+         (node (cadr link)))
     (when (equal "mpv" (plist-get node :type))
       (let ((meta (mpvi-parse-link (plist-get node :path)))
-            (end (save-excursion (goto-char (plist-get node :end)) (skip-chars-backward " \t") (point))))
-        `(:path ,(car meta) :vbeg ,(cadr meta) :vend ,(caddr meta) :end ,end ,@node)))))
+            (begin (org-element-begin link))
+            (end (save-excursion (goto-char (org-element-end link)) (skip-chars-backward " \t") (point))))
+        `(:path ,(car meta) :vbeg ,(cadr meta) :vend ,(caddr meta) :begin ,begin :end ,end ,@node)))))
 
 (defun mpvi-build-mpv-link (path &optional beg end desc)
   "Build mpv link with timestamp that used in org buffer.
@@ -1208,7 +1210,7 @@ If NUM is not nil, go back that position first."
 
 (defun mpvi-seeking-capture-as-attach ()
   "Capture current screenshot and insert as attach link."
-  (interactive)
+  (interactive nil org-mode)
   (with-current-buffer (window-buffer (minibuffer-selected-window))
     (unless (derived-mode-p 'org-mode)
       (user-error "This is not org-mode, should not insert org link")))
@@ -1278,7 +1280,7 @@ If any, prompt user to choose one video in playlist to play."
 (defun mpvi-insert (&optional prompt)
   "Insert a mpv link or update a mpv link at point.
 PROMPT is used in minibuffer when invoke `mpvi-seek'."
-  (interactive "P")
+  (interactive "P" org-mode)
   (if (derived-mode-p 'org-mode)
       (let ((path (mpvi-origin-path)) description)
         (unless (mpvi-seekable)
@@ -1390,13 +1392,13 @@ ARG is the argument."
 
 (defun mpvi-current-link-seek ()
   "Seek position for this link."
-  (interactive)
+  (interactive nil org-mode)
   (mpvi-with-current-mpv-link (node)
     (when node (mpvi-seek))))
 
 (defun mpvi-current-link-update-end-pos ()
   "Update the end position on this link."
-  (interactive)
+  (interactive nil org-mode)
   (mpvi-with-current-mpv-link (node)
     (when node
       (let ((ret (mpvi-seek (or (plist-get node :vend)
@@ -1409,7 +1411,7 @@ ARG is the argument."
 
 (defun mpvi-current-link-show-preview ()
   "Show the preview tooltip for this link."
-  (interactive)
+  (interactive nil org-mode)
   (when-let* ((node (mpvi-parse-link-at-point)))
     (let* ((scr (funcall mpvi-screenshot-function (plist-get node :path) (plist-get node :vbeg)))
            (img (create-image scr nil nil :width 400))
