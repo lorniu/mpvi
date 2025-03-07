@@ -1007,6 +1007,8 @@ Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
 
 (defvar mpvi-seek-overlay nil)
 
+(defvar mpvi-seek-refresh-timer nil)
+
 (defvar mpvi-seek-map
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map minibuffer-local-map)
@@ -1044,36 +1046,34 @@ Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
     (define-key map (kbd "C-q") #'abort-minibuffers)
     map))
 
-(defvar mpvi-seek-annotation-alist
-  '((if (eq (mpvi-prop 'loop) t) "Looping")
-    (if (eq (mpvi-prop 'pause) t) "Paused")
-    ("Speed" . (format "%.2f" (mpvi-prop 'speed)))
-    ("Total" . (mpvi-secs-to-hms (mpvi-prop 'duration) nil t)))
-  "The items displayed in the minibuffer when `mpvi-seek-refresh-annotation'.")
-
 (defun mpvi-seek-refresh-annotation ()
   "Show information of the current playing in minibuffer."
+  (ignore-errors (cancel-timer mpvi-seek-refresh-timer))
   (if mpvi-seek-overlay (delete-overlay mpvi-seek-overlay))
-  (let ((kf (lambda (s) (if s (format " %s:" s))))
-        (vf (lambda (s) (if s (propertize (format " %s " s) 'face mpvi-annotation-face))))
+  (let ((vf (lambda (s) (if s (propertize (format "%s" s) 'face mpvi-annotation-face))))
         (sf (lambda (s) (propertize " " 'display `(space :align-to (- right-fringe ,(1+ (length s))))))) ; space
         (ov (make-overlay (point-max) (point-max) nil t t)))
     (overlay-put ov 'intangible t)
     (setq mpvi-seek-overlay ov)
     (if (mpvi-seekable)
         (condition-case nil
-            (let* ((hms (when-let* ((s (ignore-errors (mpvi-secs-to-hms (string-to-number (minibuffer-contents))))))
-                          (funcall vf (format "%s  %.2f%% " s (mpvi-prop 'percent-pos)))))
-                   (text (cl-loop for i in mpvi-seek-annotation-alist
-                                  if (stringp (car i)) concat (concat (funcall kf (car i)) " " (funcall vf (eval (cdr i))))
-                                  else concat (funcall vf (eval i))))
-                   (space (funcall sf (concat hms text))))
-              (overlay-put ov 'before-string (propertize (concat space hms text) 'cursor t)))
+            (let* ((loop (if (eq (mpvi-prop 'loop) t) (funcall vf "[Looping] ")))
+                   (paused (if (eq (mpvi-prop 'pause) t) (funcall vf "[Paused] ")))
+                   (time (funcall vf (mpvi-secs-to-hms (mpvi-prop 'time-pos) nil t)))
+                   (total (funcall vf (mpvi-secs-to-hms (mpvi-prop 'duration) nil t)))
+                   (percent (funcall vf (format "%.1f%%" (mpvi-prop 'percent-pos))))
+                   (speed (funcall vf (format "%.2f" (mpvi-prop 'speed))))
+                   (concated (concat loop (if loop " ") paused (if paused " ")
+                                     time "/" total "  " percent "  Speed: " speed))
+                   (space (funcall sf concated)))
+              (overlay-put ov 'before-string (propertize (concat space concated) 'cursor t))
+              (setq mpvi-seek-refresh-timer (run-with-timer 1 nil #'mpvi-seek-refresh-annotation)))
           (error nil))
       (let* ((title (funcall vf (concat "        >> " (string-trim (or (mpvi-prop 'media-title) "")))))
              (state (funcall vf (if (eq (mpvi-prop 'pause) t) "Paused")))
              (space (funcall sf state)))
-        (delete-minibuffer-contents) (insert "0")
+        (delete-minibuffer-contents)
+        (insert "0")
         (overlay-put ov 'before-string (propertize (concat title space state) 'cursor t))))))
 
 ;;;###autoload
@@ -1098,7 +1098,12 @@ PROMPT is used if non-nil for `minibuffer-prompt'."
                                             (not (<= 0 (string-to-number (minibuffer-contents)) (mpvi-prop 'duration))))
                                     (delete-region start end)))
                                 nil t)
-                      (add-hook 'post-command-hook #'mpvi-seek-refresh-annotation nil t))
+                      (add-hook 'minibuffer-exit-hook (lambda ()
+                                                        (ignore-errors (cancel-timer mpvi-seek-refresh-timer))
+                                                        (setq mpvi-seek-refresh-timer nil)))
+                      (add-hook 'post-command-hook #'mpvi-seek-refresh-annotation nil t)
+                      (when mpvi-seek-refresh-timer (cancel-timer mpvi-seek-refresh-timer))
+                      (setq mpvi-seek-refresh-timer (run-with-timer 1 nil #'mpvi-seek-refresh-annotation)))
                   (ignore-errors
                     (read-from-minibuffer
                      (or prompt (if (mpvi-seekable)
