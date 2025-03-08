@@ -45,7 +45,7 @@ Core commands:
 Command `mpvi-seek` is the most frequently used one. It integrates many functions through minibuffer:
 - `i` Insert timestamp link into current buffer
 - `Space` Toggle play and pause
-- `j/k/l` Change the playback speed
+- `j/k/m` Change the playback speed
 - `n/p/N/P/M-n/M-p/C-l` Seek to any position smartly
 - `s/C-s/C-i` Multiple ways to take screenshots
 - `r/C-r` OCR recognition of the current playback screen
@@ -62,6 +62,7 @@ Timestamp link is link of format `[mpv:https://xxx.com#10-30]`. It's clickable a
 - `, b` Change the end time in current link
 - `, v` Preview the screenshot of current time position in current link
 - `, c` Video download, transcode, clip and so on, **ALL IN ONE**.
+- `, h` show this help
 
 Look the keymap definitions for more:
 - `mpvi-open-map`

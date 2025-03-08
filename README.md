@@ -55,7 +55,7 @@ winget install mpv yt-dlp ffmpeg Tesseract-OCR
 其中 `mpvi-seek` 是最常用的，它通过 minibuffer 集成了很多功能。比如:
 - `i` 在 buffer 中插入时间戳链接
 - `Space` 切换暂停与播放
-- `j/k/l` 调整播放速度
+- `j/k/m` 调整播放速度
 - `n/p/N/P/M-n/M-p/C-l` 等实现各种维度的播放进度调整
 - `s/C-s/C-i` 等实现各种方式的截图
 - `r/C-r` 对当前播放页面进行 OCR 识别并复制结果
@@ -72,6 +72,7 @@ winget install mpv yt-dlp ffmpeg Tesseract-OCR
 - `, b` 更改链接中视频的结束时间
 - `, v` 预览链接中视频时间戳位置的画面
 - `, c` 视频的下载、转码、截取。**All In One**, 很好用
+- `, h` 显示此帮助信息
 
 其他补充:
 - 详细的快捷键参见 map 定义: `mpvi-open-map`, `mpvi-seek-map`, `mpvi-org-link-map`。不合意可自行扩展、重新绑定

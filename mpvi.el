@@ -1018,7 +1018,7 @@ Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map minibuffer-local-map)
     (define-key map (kbd "i")   #'mpvi-seeking-insert)
-    (define-key map (kbd "g")   #'mpvi-seeking-revert)
+    (define-key map (kbd "l")   #'mpvi-seeking-revert)
     (define-key map (kbd "n")   (lambda () (interactive) (mpvi-seeking-walk 1)))
     (define-key map (kbd "p")   (lambda () (interactive) (mpvi-seeking-walk -1)))
     (define-key map (kbd "N")   (lambda () (interactive) (mpvi-seeking-walk "1%")))
@@ -1029,9 +1029,9 @@ Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
     (define-key map (kbd "C-n") (lambda () (interactive) (mpvi-seeking-walk 1)))
     (define-key map (kbd "C-p") (lambda () (interactive) (mpvi-seeking-walk -1)))
     (define-key map (kbd "M-<") (lambda () (interactive) (mpvi-seeking-revert 0)))
-    (define-key map (kbd "k")   (lambda () (interactive) (mpvi-speed 1)))
     (define-key map (kbd "j")   (lambda () (interactive) (mpvi-speed -1)))
-    (define-key map (kbd "l")   (lambda () (interactive) (mpvi-speed nil)))
+    (define-key map (kbd "k")   (lambda () (interactive) (mpvi-speed 1)))
+    (define-key map (kbd "m")   (lambda () (interactive) (mpvi-speed nil)))
     (define-key map (kbd "v")   #'mpvi-current-playing-switch-playlist)
     (define-key map (kbd "C-v") #'mpvi-current-playing-switch-playlist)
     (define-key map (kbd "c")   #'mpvi-seeking-clip)
@@ -1049,6 +1049,7 @@ Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
     (define-key map (kbd "C-o") #'mpvi-current-playing-open-externally)
     (define-key map (kbd "q")   #'abort-minibuffers)
     (define-key map (kbd "C-q") #'abort-minibuffers)
+    (define-key map (kbd "h")   #'mpvi-seeking-short-help)
     map))
 
 (defun mpvi-seek-refresh-annotation ()
@@ -1283,6 +1284,23 @@ If any, prompt user to choose one video in playlist to play."
           (message "")))
     (user-error "No playing path found")))
 
+(defun mpvi-seeking-short-help ()
+  "Command tips for current seek."
+  (interactive)
+  (let ((tips '(("c"         . "Clip")
+                ("i"         . "Insert")
+                ("n/p"       . "Position")
+                ("j/k/m"     . "Speed")
+                ("o"         . "Open")
+                ("r"         . "OCR")
+                ("t/T"       . "Subtitle")
+                ("v/C-v"     . "Playlist")
+                ("s/C-s/C-i" . "Capture")
+                ("SPC"       . "TogglePause"))))
+    (tooltip-show
+     (mapconcat (lambda (tip) (concat (car tip) ": " (cdr tip)))
+                tips "\n"))))
+
 ;; [others]
 
 ;;;###autoload
@@ -1378,6 +1396,7 @@ Default handle current video at point."
     (define-key map (kbd ", c")   #'mpvi-clip)
     (define-key map (kbd ", ,")   #'org-open-at-point)
     (define-key map (kbd ", SPC") #'mpvi-pause)
+    (define-key map (kbd ", h")   #'mpvi-current-link-short-help)
     map))
 
 (defvar mpvi-org-link-face '(:inherit org-link :underline nil :box (:style flat-button)))
@@ -1427,6 +1446,21 @@ ARG is the argument."
            (help (propertize " " 'display img))
            (x-gtk-use-system-tooltips nil))
       (tooltip-show help))))
+
+(defun mpvi-current-link-short-help ()
+  "Command tips for current link."
+  (interactive nil org-mode)
+  (let ((tips '((",s"   . "Seek")
+                (",a"   . "StampStart")
+                (",b"   . "StampEnd")
+                (",c"   . "Clip")
+                (",v"   . "Preview")
+                (",,"   . "Play")
+                (",SPC" . "Pause"))))
+    (message (mapconcat (lambda (tip)
+                          (concat (propertize (car tip) 'face 'font-lock-keyword-face)
+                                  "/" (cdr tip)))
+                        tips "  "))))
 
 ;;;###autoload
 (defun mpvi-org-link-init ()
