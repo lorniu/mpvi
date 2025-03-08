@@ -118,15 +118,20 @@ DEFAULT-NAME is used when only get a directory name."
         (expand-file-name (file-name-nondirectory default-name) target)
       (expand-file-name target))))
 
-(defun mpvi-time-to-secs (time)
-  "Convert TIME to seconds format."
+(defun mpvi-time-to-secs (time &optional total)
+  "Convert TIME to seconds format.
+When there is \\='%' in time, return percent seconds from TOTAL."
   (require 'org-timer)
   (cond ((or (null time) (numberp time)) time)
-        ((or (not (stringp time)) (not (string-match-p "^-?[0-9:.]+$" time)))
+        ((or (not (stringp time)) (not (string-match-p "^-?[0-9:.%]+$" time)))
          (user-error "This is not a valid time: %s" time))
         ((cl-find ?: time)
          (+ (org-timer-hms-to-secs (org-timer-fix-incomplete time))
             (if-let* ((p (cl-search "." time))) (string-to-number (cl-subseq time p)) 0)))
+        ((cl-find ?% time)
+         (if (null total)
+             (user-error "Percent time need TOTAL non nil")
+           (/ (* total (string-to-number (substring time 0 (- (length time) 1)))) 100.0)))
         (t (string-to-number time))))
 
 (defun mpvi-secs-to-hms (secs &optional full truncate)
@@ -1094,9 +1099,12 @@ PROMPT is used if non-nil for `minibuffer-prompt'."
                     (lambda ()
                       (add-hook 'after-change-functions
                                 (lambda (start end _)
-                                  (when (or (not (string-match-p "^[0-9]+\\.?[0-9]*$" (buffer-substring start end)))
-                                            (not (<= 0 (string-to-number (minibuffer-contents)) (mpvi-prop 'duration))))
-                                    (delete-region start end)))
+                                  (let ((text (minibuffer-contents)))
+                                    (unless (or (string-match-p "^[0-9]+\\.?[0-9]*$" text) ; 23.3
+                                                (string-match-p "^[0-9]\\{1,2\\}\\(\\.[0-9]*\\)?%$" text) ; 23%
+                                                (string-match-p ; 1:23:32
+                                                 "^\\([0-9]+:\\)?\\([0-9]\\{1,2\\}\\):\\([0-9]\\{1,2\\}\\)?$" text))
+                                      (delete-region start end))))
                                 nil t)
                       (add-hook 'minibuffer-exit-hook (lambda ()
                                                         (ignore-errors (cancel-timer mpvi-seek-refresh-timer))
@@ -1107,14 +1115,14 @@ PROMPT is used if non-nil for `minibuffer-prompt'."
                   (ignore-errors
                     (read-from-minibuffer
                      (or prompt (if (mpvi-seekable)
-                                    (format "MPV Seek (0-%d): " (mpvi-prop 'duration))
+                                    (format "Seek (0-%d, mm:ss or n%%): " (mpvi-prop 'duration))
                                   "MPV Controller: "))
-                     (number-to-string (or pos (mpvi-prop 'playback-time)))
-                     mpvi-seek-map t 'mpvi-seek-hist))))))
-          (cond ((stringp ret) (message "%s" ret))
-                ((eq (mpvi-prop 'pause) :json-false))
-                ((and (mpvi-seekable) (numberp ret))
-                 (mpvi-prop 'playback-time ret)))
+                     (format "%.1f" (or pos (mpvi-prop 'playback-time)))
+                     mpvi-seek-map nil 'mpvi-seek-hist))))))
+          (unless (eq (mpvi-prop 'pause) :json-false)
+            (when (mpvi-seekable)
+              (when-let ((pos (mpvi-time-to-secs ret (mpvi-prop 'duration))))
+                (mpvi-prop 'playback-time pos))))
           (cons (ignore-errors (mpvi-prop 'playback-time)) paused))
       (mpvi-pause (or mpvi-seek-paused paused))
       (mpvi-prop 'keep-open (if (eq keep-open :json-false) 'no 'yes)))))
@@ -1131,21 +1139,17 @@ If OFFSET is :ff or :fb then step forward/backward one frame."
      (when (and (stringp offset) (string-match-p "^-?[0-9]\\{0,2\\}\\.?[0-9]*%$" offset)) ; percent
        (setq offset (* (/ (string-to-number (cl-subseq offset 0 -1)) 100.0) (mpvi-prop 'duration))))
      (unless (numberp offset) (setq offset 1))
-     (let* ((old (if (or (zerop offset) (eq (mpvi-prop 'pause) t))
+     (let* ((total (mpvi-prop 'duration))
+            (old (if (or (zerop offset) (eq (mpvi-prop 'pause) t))
                      (let ((str (string-trim (minibuffer-contents))))
-                       (unless (string-match-p "^[0-9]+\\(\\.[0-9]+\\)?$" str)
-                         (user-error "Not valid number"))
-                       (string-to-number str))
+                       (or (mpvi-time-to-secs str total)
+                           (user-error "Not valid time input")))
                    (mpvi-prop 'playback-time)))
-            (new (+ old offset))
-            (total (mpvi-prop 'duration)))
+            (new (+ old offset)))
        (if (< new 0) (setq new 0))
        (if (> new total) (setq new total))
-       (unless (= old new)
-         (delete-minibuffer-contents)
-         (insert (mpvi-secs-to-string new)))
        (mpvi-prop 'playback-time new))))
-  (mpvi-seeking-revert))
+  (unless (zerop offset) (mpvi-seeking-revert)))
 
 (defun mpvi-seeking-revert (&optional num)
   "Insert current playback-time to minibuffer.
