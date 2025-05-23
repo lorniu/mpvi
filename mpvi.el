@@ -402,8 +402,8 @@ When NOSEEK is not nil then dont try to seek but open directly."
          (node (cadr link)))
     (when (equal "mpv" (plist-get node :type))
       (let ((meta (mpvi-parse-link (plist-get node :path)))
-            (begin (org-element-begin link))
-            (end (save-excursion (goto-char (org-element-end link)) (skip-chars-backward " \t") (point))))
+            (begin (org-element-property :begin link))
+            (end (save-excursion (goto-char (org-element-property :end link)) (skip-chars-backward " \t") (point))))
         `(:path ,(car meta) :vbeg ,(cadr meta) :vend ,(caddr meta) :begin ,begin :end ,end ,@node)))))
 
 (defun mpvi-build-mpv-link (path &optional beg end desc)
@@ -1475,7 +1475,7 @@ ARG is the argument."
                            :follow #'mpvi-org-https-link-push))
 
 ;;;###autoload
-(eval-after-load 'org '(mpvi-org-link-init))
+(with-eval-after-load 'org (mpvi-org-link-init))
 
 
 ;;; Miscellaneous
