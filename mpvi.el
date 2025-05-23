@@ -891,8 +891,8 @@ JSON-DATA is argument."
   "Play TRACK in EMMS. Integrate with `mpvi-play'."
   (setq emms-player-mpv-stopped nil)
   (emms-player-mpv-proc-playing nil)
-  (let ((track-name (emms-track-get track 'name))
-        (start-func (lambda () (mpvi-play track-name nil nil t)))) ; <- change this
+  (let* ((track-name (emms-track-get track 'name))
+         (start-func (lambda () (mpvi-play track-name nil nil t)))) ; <- change this
     (if (and (not (eq system-type 'windows-nt)) ; pity, auto switch next not working on Windows
              emms-player-mpv-ipc-stop-command)
         (setq emms-player-mpv-ipc-stop-command start-func)
