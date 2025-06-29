@@ -158,7 +158,7 @@ When GROUPP not nil then try to insert commas to string for better reading."
 (defun mpvi-mpv-version ()
   "Return the current mpv version as a cons cell."
   (with-temp-buffer
-    (process-file "mpv" nil t "--version")
+    (process-file "mpv" nil t nil "--version")
     (goto-char (point-min))
     (if (re-search-forward "v\\([0-9]+\\)\\.\\([0-9]+\\)" (line-end-position) t)
         (cons (string-to-number (match-string 1))
