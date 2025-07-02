@@ -12,7 +12,9 @@
 ;;; Commentary:
 ;;
 ;; Integrate MPV, EMMS, Org and others with Emacs, make watching/download/convert
-;; video or audio conveniently and taking notes easily. Make EMMS support Windows.
+;; video or audio conveniently and taking notes easily.
+;;
+;; Make EMMS support Windows.
 ;;
 ;; Installation:
 ;;  - Install `emms' from elpa
@@ -21,7 +23,7 @@
 ;;
 ;; Use `mpvi-open' to open a video/audio, then control the MPV with `mpvi-seek'.
 ;;
-;; You can alse control MPV that is opened from `emms'.
+;; You can also control MPV that is opened from `emms'.
 
 ;;; Code:
 
@@ -70,7 +72,11 @@
 (declare-function org-timer-secs-to-hms     "org.el" t t)
 (declare-function org-timer-fix-incomplete  "org.el" t t)
 (declare-function org-timer-hms-to-secs     "org.el" t t)
-(declare-function org-element-context       "org.el" t t)
+(declare-function org-element-context       "org-element.el" t t)
+(declare-function org-element-property      "org-element.el" t t)
+(declare-function emms-add-url              "emms.el" t t)
+(declare-function emms-add-file             "emms.el" t t)
+(declare-function emms-add-directory        "emms.el" t t)
 
 ;; Helpers
 
@@ -307,7 +313,7 @@ Alert user when not seekable when ARG not nil."
 (defcustom mpvi-post-play-cmds nil
   "Command list let MPV process run after loading a file.
 See `emms-player-mpv-cmd' for syntax."
-  :type 'list)
+  :type 'expr)
 
 (cl-defun mpvi-play (path &optional (beg 0) end emms noseek)
   "Play PATH from BEG to END.
@@ -325,7 +331,7 @@ When NOSEEK is not nil then dont try to seek but open directly."
         (mpvi-prop 'playback-time beg)
         (mpvi-prop 'pause 'no))
     ;; start and loadfile
-    (message "Waiting %s..." path)
+    (unless emms (message "Waiting %s..." path))
     (if (emms-player-mpv-proc-playing-p) (ignore-errors (mpvi-pause t)))
     ;; If path is not the current playing, load it
     (let (logo title subfile opts cmds started)
@@ -370,7 +376,6 @@ When NOSEEK is not nil then dont try to seek but open directly."
                                            "")))
                               (push path mpvi-play-history))))
              (lst `(((set_property speed 1))
-                    ((set_property keep-open ,(if emms 'no 'yes)))
                     ;; Since mpv 0.38.0, an insertion index argument is added as the third argument
                     ;; https://mpv.io/manual/master/#command-interface, loadfile
                     ((loadfile ,path replace ,@loadopts) . ,loadhandler)
@@ -380,7 +385,6 @@ When NOSEEK is not nil then dont try to seek but open directly."
                                else collect (list c))))
              (cmd (cons 'batch (delq nil lst))))
         (mpvi-log "load-commands: %S" cmd)
-        (if (and emms (emms-player-mpv-proc-playing-p)) (emms-player-mpv-stop))
         (mpvi-async-cmd cmd)))))
 
 ;; Timestamp Link
@@ -749,12 +753,7 @@ Pass OPTS to `yt-dlp' when it is not nil."
 ;;
 ;;    - Should improve `make-network-process' to support this. Here solved by PowerShell
 ;;
-;; 2) Some MPV events like 'end-file/playback-restart' not triggered as expected on Windows (BUG?),
-;;    So some logics in `emms-player-mpv-event-handler' are not working.
-;;
-;;    - Maybe should improve MPV for Windows. Here workaround by adding some ugly patches in EMMS
-;;
-;; 3) The APIs in `emms-player-mpv.el' are too tightly tied to EMMS playlist
+;; 2) The APIs in `emms-player-mpv.el' are too tightly tied to EMMS playlist
 ;;
 ;;    - Maybe should refactor the APIs to make them can be used standalone, that is, can connect
 ;;      to MPV and play videos without having to update EMMS playlist and so on
@@ -764,7 +763,7 @@ Pass OPTS to `yt-dlp' when it is not nil."
 
 (defun mpvi-emms-player-mpv-ipc-init (func)
   "Advice for FUNC `emms-player-mpv-ipc-init', add Windows support."
-  (if (eq system-type 'windows-nt)
+  (if (memq system-type '(cygwin windows-nt))
       (mpvi-connect-to-win-named-pipe emms-player-mpv-ipc-socket)
     (funcall func)))
 
@@ -777,7 +776,7 @@ JSON-STRING is json format string return by ipc process."
         (setq json (json-read-from-string json-string))
       ;; PowerShell will output error message when something goes wrong to standard output,
       ;; It's not json format, so catch it here
-      (error (erase-buffer) (user-error "ERR in IPC-RECV: %s\n------\n%s" err json-string)))
+      (error (erase-buffer) (signal (car err) (cdr err))))
     (let ((rid (alist-get 'request_id json)))
       (when (and rid (not (alist-get 'command json))) ; skip the echoed 'command' for Windows
         (emms-player-mpv-ipc-req-resolve
@@ -788,25 +787,74 @@ JSON-STRING is json format string return by ipc process."
         (when (emms-playlist-current-selected-track)
           (run-hook-with-args 'emms-player-mpv-event-functions json))))))
 
-(defun mpvi-emms-player-mpv-event-handler (func json-data)
-  "Advice for FUNC `mpvi-emms-player-mpv-event-handler', workaround for Windows.
-JSON-DATA is argument."
-  (when (eq system-type 'windows-nt)
-    (pcase (alist-get 'event json-data)
-      ("start-file" ; playback-restart event not working in Windows
-       (unless (emms-player-mpv-proc-playing-p)
-         (emms-player-mpv-proc-playing t)
-         (emms-player-started emms-player-mpv))
-       (emms-player-mpv-event-playing-time-sync))))
-  (funcall func json-data))
+(defun mpvi-make-named-pipe-process-for-windows (pipe process buffer filter sentinel)
+  "Create a PROCESS for communicating with MPV via a named PIPE on Windows."
+  (let* ((ps1 "
+$ErrorActionPreference = 'Stop';
+$pipename = '%s';
+try {
+    $utf8 = [System.Text.UTF8Encoding]::new($false);
+    [Console]::OutputEncoding = $utf8;
 
-(defun mpvi-emms-player-mpv-force-stop (&rest _)
-  "Advice for `emms-player-mpv-proc-sentinel' and `emms-player-mpv-stop'."
-  ;; Event 'end-file' is not working correctly on Windows! So have a try like this..
-  (when (eq system-type 'windows-nt)
-    (emms-player-mpv-proc-stop)
-    (emms-player-mpv-ipc-stop)
-    (emms-player-mpv-proc-playing nil)))
+    $pipe = [System.IO.Pipes.NamedPipeClientStream]::new('.', $pipename, [System.IO.Pipes.PipeDirection]::InOut, [System.IO.Pipes.PipeOptions]::Asynchronous);
+    $pipe.Connect(5000);
+
+    $pipeReader = [System.IO.StreamReader]::new($pipe, $utf8);
+    $pipeWriter = [System.IO.StreamWriter]::new($pipe, $utf8);
+    $pipeWriter.AutoFlush = $true;
+
+    $stdInStream = [System.Console]::OpenStandardInput();
+    $stdInReader = [System.IO.StreamReader]::new($stdInStream, $utf8);
+
+    $pipeReadTask = $pipeReader.ReadLineAsync();
+    $consoleReadTask = $stdInReader.ReadLineAsync();
+
+    while ($true) {
+        $tasks = @($pipeReadTask, $consoleReadTask);
+        $waitIndex = [System.Threading.Tasks.Task]::WaitAny($tasks);
+
+        if ($waitIndex -eq 0) {
+            $completedTask = $pipeReadTask;
+            if ($completedTask.IsFaulted) { break; }
+            $line = $completedTask.GetAwaiter().GetResult();
+            if ($line -eq $null) { break; }
+            [Console]::Out.WriteLine($line);
+            [Console]::Out.Flush();
+            $pipeReadTask = $pipeReader.ReadLineAsync();
+        }
+        elseif ($waitIndex -eq 1) {
+            $completedTask = $consoleReadTask;
+            if ($completedTask.IsFaulted) { break; }
+            $line = $completedTask.GetAwaiter().GetResult();
+            if ($line -eq $null) { break; }
+            $pipeWriter.WriteLine($line);
+            $consoleReadTask = $stdInReader.ReadLineAsync();
+        }
+    }
+}
+catch [System.TimeoutException] {
+    [Console]::Error.WriteLine('mpvi-error: Timeout: Failed to connect to MPV pipe: ' + $pipename);
+}
+catch {
+    [Console]::Error.WriteLine('mpvi-error: An unexpected error occurred: ' + $_.ToString());
+}
+finally {
+    if ($stdInReader) { $stdInReader.Dispose(); }
+    if ($pipeReader) { $pipeReader.Dispose(); }
+    if ($pipeWriter) { $pipeWriter.Dispose(); }
+    if ($pipe) { $pipe.Dispose(); }
+    [Console]::Error.WriteLine('mpvi: PowerShell bridge process terminated.');
+}
+")
+         (cmd (format "& {%s}" (replace-regexp-in-string "[ \n\r\t]+" " " (format ps1 pipe )))))
+    (make-process :name process
+                  :connection-type 'pipe
+                  :buffer (get-buffer-create buffer)
+                  :noquery t
+                  :coding 'utf-8-emacs-unix
+                  :filter filter
+                  :sentinel sentinel
+                  :command (list "powershell" "-NoProfile" "-Command" cmd))))
 
 (defun mpvi-connect-to-win-named-pipe (pipename)
   "Connect to MPV by PIPENAME via `PowerShell'."
@@ -821,34 +869,9 @@ JSON-DATA is argument."
                    (user-error "No MPV process found"))
     (while (not (mpvi-win-named-pipe-exists-p pipename))
       (sleep-for 0.05)))
-  (let* ((ps1 " $conn = [System.IO.Pipes.NamedPipeClientStream]::new('.', '%s');
-                try {
-                  $reader = [System.IO.StreamReader]::new($conn);
-                  $writer = [System.IO.StreamWriter]::new($conn);
-                  $conn.Connect(5000);
-                  while (1) {
-                    $msg = Read-Host;
-                    $writer.WriteLine($msg);
-                    $writer.Flush();
-                    $conn.WaitForPipeDrain();
-                    do {
-                      $ret = $reader.ReadLine();
-                      Write-Host $ret;
-                    } while ($ret -match '\"event\":');
-                  }
-                }
-                catch [System.TimeoutException], [System.InvalidOperationException] { Write-Host 'Connect to MPV failed'; }
-                catch { Write-Host $_; }
-                finally { $conn.Dispose(); } ")
-         (cmd (format "& {%s}" (replace-regexp-in-string
-                                "[ \n\r\t]+" " " (format ps1 pipename))))
-         (proc (make-process :name "emms-player-mpv-ipc"
-                             :connection-type 'pipe
-                             :buffer (get-buffer-create emms-player-mpv-ipc-buffer)
-                             :noquery t
-                             :filter #'emms-player-mpv-ipc-filter
-                             :sentinel #'emms-player-mpv-ipc-sentinel
-                             :command (list "powershell" "-NoProfile" "-Command" cmd))))
+  (let ((proc (mpvi-make-named-pipe-process-for-windows
+               pipename "emms-player-mpv-ipc" emms-player-mpv-ipc-buffer
+               #'emms-player-mpv-ipc-filter #'emms-player-mpv-ipc-sentinel)))
     (with-timeout (5 (setq emms-player-mpv-ipc-proc nil)
                      (user-error "Connect to MPV failed"))
       (while (not (eq (process-status emms-player-mpv-proc) 'run))
@@ -891,12 +914,8 @@ JSON-DATA is argument."
   "Play TRACK in EMMS. Integrate with `mpvi-play'."
   (setq emms-player-mpv-stopped nil)
   (emms-player-mpv-proc-playing nil)
-  (let* ((track-name (emms-track-get track 'name))
-         (start-func (lambda () (mpvi-play track-name nil nil t)))) ; <- change this
-    (if (and (not (eq system-type 'windows-nt)) ; pity, auto switch next not working on Windows
-             emms-player-mpv-ipc-stop-command)
-        (setq emms-player-mpv-ipc-stop-command start-func)
-      (funcall start-func))))
+  (let ((track-name (emms-track-get track 'name)))
+    (mpvi-play track-name nil nil t)))
 
 ;; Minor mode
 
@@ -908,22 +927,16 @@ JSON-DATA is argument."
       (progn
         (advice-add #'emms-player-mpv-ipc-init :around #'mpvi-emms-player-mpv-ipc-init)
         (advice-add #'emms-player-mpv-ipc-recv :override #'mpvi-emms-player-mpv-ipc-recv)
-        (advice-add #'emms-player-mpv-event-handler :around #'mpvi-emms-player-mpv-event-handler)
-        (advice-add #'emms-player-mpv-proc-sentinel :after #'mpvi-emms-player-mpv-force-stop)
         ;;
         (advice-add #'emms-player-started :override #'mpvi-emms-player-started)
         (advice-add #'emms-player-stopped :override #'mpvi-emms-player-stopped)
         ;;
-        (advice-add #'emms-player-mpv-start :override #'mpvi-emms-player-mpv-start)
-        (advice-add #'emms-player-mpv-stop :after #'mpvi-emms-player-mpv-force-stop))
+        (advice-add #'emms-player-mpv-start :override #'mpvi-emms-player-mpv-start))
     (advice-remove #'emms-player-mpv-ipc-init #'mpvi-emms-player-mpv-ipc-init)
     (advice-remove #'emms-player-mpv-ipc-recv #'mpvi-emms-player-mpv-ipc-recv)
-    (advice-remove #'emms-player-mpv-event-handler #'mpvi-emms-player-mpv-event-handler)
-    (advice-remove #'emms-player-mpv-proc-sentinel #'mpvi-emms-player-mpv-force-stop)
     (advice-remove #'emms-player-started #'mpvi-emms-player-started)
     (advice-remove #'emms-player-stopped #'mpvi-emms-player-stopped)
-    (advice-remove #'emms-player-mpv-start #'mpvi-emms-player-mpv-start)
-    (advice-remove #'emms-player-mpv-stop #'mpvi-emms-player-mpv-force-stop)))
+    (advice-remove #'emms-player-mpv-start #'mpvi-emms-player-mpv-start)))
 
 (mpvi-emms-integrated-mode 1)
 
@@ -943,7 +956,7 @@ For example:
     (\"https://www.douyu.com/110\" . \"some description\"))
 
 This can be used by `mpvi-open-from-favors' to quick open video."
-  :type 'list)
+  :type 'expr)
 
 (defvar mpvi-open-map
   (let ((map (make-sparse-keymap)))
@@ -1437,6 +1450,8 @@ ARG is the argument."
                              (plist-get node :vbeg) (car ret))))
           (save-excursion (insert link)))))))
 
+(defvar x-gtk-use-system-tooltips)
+
 (defun mpvi-current-link-show-preview ()
   "Show the preview tooltip for this link."
   (interactive nil org-mode)
@@ -1465,7 +1480,6 @@ ARG is the argument."
 ;;;###autoload
 (defun mpvi-org-link-init ()
   "Setup org link with `mpv' prefix."
-  (require 'org)
   (set-keymap-parent mpvi-org-link-map org-mouse-map)
   (org-link-set-parameters "mpv"
                            :face mpvi-org-link-face
@@ -1475,7 +1489,7 @@ ARG is the argument."
                            :follow #'mpvi-org-https-link-push))
 
 ;;;###autoload
-(with-eval-after-load 'org (mpvi-org-link-init))
+(eval-after-load 'org '(mpvi-org-link-init))
 
 
 ;;; Miscellaneous
@@ -1483,5 +1497,8 @@ ARG is the argument."
 (require 'mpvi-ps) ; optional platform specialized config
 
 (provide 'mpvi)
+
+;;;###autoload
+(if (memq system-type '(cygwin windows-nt)) (eval-after-load 'emms '(require 'mpvi)))
 
 ;;; mpvi.el ends here
