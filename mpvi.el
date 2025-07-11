@@ -165,20 +165,21 @@ When GROUPP not nil then try to insert commas to string for better reading."
 (defun mpvi-mpv-version ()
   "Return the current mpv version as a cons cell."
   (with-temp-buffer
-    (process-file "mpv" nil t nil "--version")
+    (process-file emms-player-mpv-command-name nil t nil "--version")
     (goto-char (point-min))
-    (if (re-search-forward "v\\([0-9]+\\)\\.\\([0-9]+\\)" (line-end-position) t)
-        (cons (string-to-number (match-string 1))
-              (string-to-number (match-string 2)))
+    (if (re-search-forward "v\\([0-9]+\\)\\.\\([0-9]+\\)\\.\\([0-9+]\\)" (line-end-position) t)
+        (list (string-to-number (match-string 1))
+              (string-to-number (match-string 2))
+              (string-to-number (match-string 3)))
       (user-error "No mpv version found"))))
 
 (defun mpvi-compare-mpv-version (comparefn version)
   "Compare current mpv verion with the special VERSION through COMPAREFN.
-VERSION should be a cons cell, like \\='(0 38) representing version 0.38."
+VERSION should be a list, like \\='(0 38 0) representing version 0.38.0."
   (let ((current (mpvi-mpv-version)))
     (funcall comparefn
-             (+ (* (car current) 1000) (cdr current))
-             (+ (* (car version) 1000) (cdr version)))))
+             (+ (* (car current) 1000000) (* (cadr current) 1000) (caddr current))
+             (+ (* (car version) 1000000) (* (cadr version) 1000) (caddr version)))))
 
 ;; MPV
 
@@ -247,14 +248,8 @@ Return list of (index-or-title playlist-items)."
   "Check if MPV is runing."
   (unless (emms-player-mpv-proc-playing-p)
     (user-error "No living MPV found"))
-  (with-temp-buffer
-    (unless (and (zerop (call-process emms-player-mpv-command-name nil '(t t) nil "--version"))
-                 (progn (goto-char (point-min)) (re-search-forward "^mpv\\s-+v?\\(\\([0-9]+\\.?\\)+\\)" nil t 1))
-                 (string> (mapconcat (lambda (n) (format "%03d" n))
-                                     (seq-map 'string-to-number (split-string (match-string-no-properties 1) "\\." t))
-                                     ".")
-                          "000.016.999"))
-      (user-error "You should update MPV to support ipc connect"))))
+  (unless (mpvi-compare-mpv-version #'> '(0 16 999))
+    (user-error "You should update MPV to support ipc connect")))
 
 (defun mpvi-origin-path (&optional path)
   "Reverse of `mpvi-extract-url', return the origin url for PATH.
@@ -282,34 +277,6 @@ Run get_property instead if VAL is absent."
   (if supplied
       (mpvi-async-cmd `(set_property ,sym ,val))
     (mpvi-cmd `(get_property ,sym))))
-
-(defun mpvi-pause (&optional how)
-  "Set or toggle pause state of MPV.
-HOW is :json-false or t that returned by get-property.
-Toggle pause if HOW is nil."
-  (interactive)
-  (mpvi-async-cmd
-   (if how
-       `(set pause ,(if (eq how :json-false) 'no 'yes))
-     `(cycle pause))))
-
-(defun mpvi-seekable (&optional arg)
-  "Whether current video is seekable.
-Alert user when not seekable when ARG not nil."
-  (let ((seekable (eq (mpvi-prop 'seekable) t)))
-    (if (and arg (not seekable))
-        (user-error "Current video is not seekable, do nothing")
-      seekable)))
-
-(defun mpvi-speed (&optional n)
-  "Tune the speed base on N."
-  (mpvi-seekable 'assert)
-  (pcase n
-    ('nil (mpvi-prop 'speed 1)) ; reset
-    ((pred numberp)
-     (let ((factor (* 1.1 n)))
-       (mpvi-async-cmd `(multiply speed ,(if (>= n 0) factor (/ -1 factor))))))
-    (_ (mpvi-prop 'speed (read-from-minibuffer "Speed to: " n nil t)))))
 
 (defcustom mpvi-post-play-cmds nil
   "Command list let MPV process run after loading a file.
@@ -362,7 +329,7 @@ When NOSEEK is not nil then dont try to seek but open directly."
       (let* ((optstr (mapconcat (lambda (x)
                                   (format "%s=%s" (car x) (cdr x)))
                                 (delq nil opts) ","))
-             (loadopts (if (ignore-errors (mpvi-compare-mpv-version #'< (cons 0 38)))
+             (loadopts (if (ignore-errors (mpvi-compare-mpv-version #'> '(0 38 0)))
                            (list optstr)
                          (list -1 optstr)))
              (loadhandler (lambda (_ err)
@@ -377,6 +344,7 @@ When NOSEEK is not nil then dont try to seek but open directly."
                                            "")))
                               (push path mpvi-play-history))))
              (lst `(((set_property speed 1))
+                    ((set_property keep-open ,(if emms 'no 'yes)))
                     ;; Since mpv 0.38.0, an insertion index argument is added as the third argument
                     ;; https://mpv.io/manual/master/#command-interface, loadfile
                     ((loadfile ,path replace ,@loadopts) . ,loadhandler)
@@ -387,6 +355,65 @@ When NOSEEK is not nil then dont try to seek but open directly."
              (cmd (cons 'batch (delq nil lst))))
         (mpvi-log "load-commands: %S" cmd)
         (mpvi-async-cmd cmd)))))
+
+(defun mpvi-pause (&optional how)
+  "Set or toggle pause state of MPV.
+HOW is :json-false or t that returned by get-property.
+Toggle pause if HOW is nil."
+  (interactive)
+  (mpvi-async-cmd
+   (if how
+       `(set pause ,(if (eq how :json-false) 'no 'yes))
+     `(cycle pause))))
+
+(defun mpvi-toggle-ontop ()
+  "Toggle display on top for mpv."
+  (interactive)
+  (mpvi-async-cmd `(cycle ontop)))
+
+(defun mpvi-toggle-mute ()
+  "Toggle mute for mpv."
+  (interactive)
+  (mpvi-async-cmd `(cycle mute)))
+
+(defun mpvi-toggle-border ()
+  "Toggle display border for mpv."
+  (interactive)
+  (mpvi-async-cmd `(cycle border)))
+
+(defun mpvi-toggle-title-bar ()
+  "Toggle display title bar for mpv."
+  (interactive)
+  (mpvi-async-cmd `(cycle title-bar)))
+
+(defun mpvi-toggle-subtitle ()
+  "Toggle display subtitle for mpv."
+  (interactive)
+  (mpvi-async-cmd `(cycle sub-visibility)))
+
+(defun mpvi-subtitle-delay (sec)
+  "Delay subtitle for SEC for mpv."
+  (interactive (list (read-number "Subtitle to delay: " 0)))
+  (mpvi-prop 'sub-delay sec))
+
+(defun mpvi-speed (&optional n)
+  "Tune the speed base on N for mpv."
+  (mpvi-seekable 'assert)
+  (pcase n
+    ('nil (mpvi-prop 'speed 1)) ; reset
+    ((pred numberp)
+     (let ((factor (* 1.1 n)))
+       (mpvi-async-cmd `(multiply speed ,(if (>= n 0) factor (/ -1 factor))))))
+    (_ (mpvi-prop 'speed (read-from-minibuffer "Speed to: " n nil t))))
+  (mpvi-seeking-revert))
+
+(defun mpvi-seekable (&optional arg)
+  "Whether current video is seekable.
+Alert user when not seekable when ARG not nil."
+  (let ((seekable (eq (mpvi-prop 'seekable) t)))
+    (if (and arg (not seekable))
+        (user-error "Current video is not seekable, do nothing")
+      seekable)))
 
 ;; Timestamp Link
 
@@ -1035,7 +1062,6 @@ Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map minibuffer-local-map)
     (define-key map (kbd "i")   #'mpvi-seeking-insert)
-    (define-key map (kbd "l")   #'mpvi-seeking-revert)
     (define-key map (kbd "n")   (lambda () (interactive) (mpvi-seeking-walk 1)))
     (define-key map (kbd "p")   (lambda () (interactive) (mpvi-seeking-walk -1)))
     (define-key map (kbd "N")   (lambda () (interactive) (mpvi-seeking-walk "1%")))
@@ -1048,7 +1074,7 @@ Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
     (define-key map (kbd "M-<") (lambda () (interactive) (mpvi-seeking-revert 0)))
     (define-key map (kbd "j")   (lambda () (interactive) (mpvi-speed -1)))
     (define-key map (kbd "k")   (lambda () (interactive) (mpvi-speed 1)))
-    (define-key map (kbd "m")   (lambda () (interactive) (mpvi-speed nil)))
+    (define-key map (kbd "l")   (lambda () (interactive) (mpvi-speed nil)))
     (define-key map (kbd "v")   #'mpvi-current-playing-switch-playlist)
     (define-key map (kbd "C-v") #'mpvi-current-playing-switch-playlist)
     (define-key map (kbd "c")   #'mpvi-seeking-clip)
@@ -1064,6 +1090,7 @@ Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
     (define-key map (kbd "SPC") #'mpvi-seeking-pause)
     (define-key map (kbd "o")   #'mpvi-current-playing-open-externally)
     (define-key map (kbd "C-o") #'mpvi-current-playing-open-externally)
+    (define-key map (kbd "m")   #'mpvi-toggle-mute)
     (define-key map (kbd "q")   #'abort-minibuffers)
     (define-key map (kbd "C-q") #'abort-minibuffers)
     (define-key map (kbd "h")   #'mpvi-seeking-short-help)
@@ -1071,33 +1098,34 @@ Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
 
 (defun mpvi-seek-refresh-annotation ()
   "Show information of the current playing in minibuffer."
-  (ignore-errors (cancel-timer mpvi-seek-refresh-timer))
-  (if mpvi-seek-overlay (delete-overlay mpvi-seek-overlay))
-  (let ((vf (lambda (s) (if s (propertize (format "%s" s) 'face mpvi-annotation-face))))
-        (sf (lambda (s) (propertize " " 'display `(space :align-to (- right-fringe ,(1+ (length s))))))) ; space
-        (ov (make-overlay (point-max) (point-max) nil t t)))
-    (overlay-put ov 'intangible t)
-    (setq mpvi-seek-overlay ov)
-    (if (mpvi-seekable)
-        (condition-case nil
-            (let* ((loop (if (eq (mpvi-prop 'loop) t) (funcall vf "[Looping] ")))
-                   (paused (if (eq (mpvi-prop 'pause) t) (funcall vf "[Paused] ")))
-                   (time (funcall vf (mpvi-secs-to-hms (mpvi-prop 'time-pos) nil t)))
-                   (total (funcall vf (mpvi-secs-to-hms (mpvi-prop 'duration) nil t)))
-                   (percent (funcall vf (format "%.1f%%" (mpvi-prop 'percent-pos))))
-                   (speed (funcall vf (format "%.2f" (mpvi-prop 'speed))))
-                   (concated (concat loop (if loop " ") paused (if paused " ")
-                                     time "/" total "  " percent "  Speed: " speed))
-                   (space (funcall sf concated)))
-              (overlay-put ov 'before-string (propertize (concat space concated) 'cursor t))
-              (setq mpvi-seek-refresh-timer (run-with-timer 1 nil #'mpvi-seek-refresh-annotation)))
-          (error nil))
-      (let* ((title (funcall vf (concat "        >> " (string-trim (or (mpvi-prop 'media-title) "")))))
-             (state (funcall vf (if (eq (mpvi-prop 'pause) t) "Paused")))
-             (space (funcall sf state)))
-        (delete-minibuffer-contents)
-        (insert "0")
-        (overlay-put ov 'before-string (propertize (concat title space state) 'cursor t))))))
+  (when (minibufferp)
+    (ignore-errors (cancel-timer mpvi-seek-refresh-timer))
+    (if mpvi-seek-overlay (delete-overlay mpvi-seek-overlay))
+    (let ((vf (lambda (s) (if s (propertize (format "%s" s) 'face mpvi-annotation-face))))
+          (sf (lambda (s) (propertize " " 'display `(space :align-to (- right-fringe ,(1+ (length s))))))) ; space
+          (ov (make-overlay (point-max) (point-max) nil t t)))
+      (overlay-put ov 'intangible t)
+      (setq mpvi-seek-overlay ov)
+      (if (mpvi-seekable)
+          (condition-case nil
+              (let* ((loop (if (eq (mpvi-prop 'loop) t) (funcall vf "[Looping] ")))
+                     (paused (if (eq (mpvi-prop 'pause) t) (funcall vf "[Paused] ")))
+                     (time (funcall vf (mpvi-secs-to-hms (mpvi-prop 'time-pos) nil t)))
+                     (total (funcall vf (mpvi-secs-to-hms (mpvi-prop 'duration) nil t)))
+                     (percent (funcall vf (format "%.1f%%" (mpvi-prop 'percent-pos))))
+                     (speed (funcall vf (format "%.2f" (mpvi-prop 'speed))))
+                     (concated (concat loop (if loop " ") paused (if paused " ")
+                                       time "/" total "  " percent "  Speed: " speed))
+                     (space (funcall sf concated)))
+                (overlay-put ov 'before-string (propertize (concat space concated) 'cursor t))
+                (setq mpvi-seek-refresh-timer (run-with-timer 1 nil #'mpvi-seek-refresh-annotation)))
+            (error nil))
+        (let* ((title (funcall vf (concat "        >> " (string-trim (or (mpvi-prop 'media-title) "")))))
+               (state (funcall vf (if (eq (mpvi-prop 'pause) t) "Paused")))
+               (space (funcall sf state)))
+          (delete-minibuffer-contents)
+          (insert "0")
+          (overlay-put ov 'before-string (propertize (concat title space state) 'cursor t)))))))
 
 ;;;###autoload
 (defun mpvi-seek (&optional pos prompt)
@@ -1173,6 +1201,8 @@ If OFFSET is :ff or :fb then step forward/backward one frame."
   "Insert current playback-time to minibuffer.
 If NUM is not nil, go back that position first."
   (interactive)
+  (unless (minibufferp)
+    (user-error "Only allowed in minibuffer"))
   (when (and num (mpvi-seekable))
     (mpvi-prop 'playback-time num))
   (delete-minibuffer-contents)
