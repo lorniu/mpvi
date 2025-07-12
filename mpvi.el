@@ -11,15 +11,15 @@
 
 ;;; Commentary:
 ;;
-;; Integrate MPV, EMMS, Org and others with Emacs, make watching/download/convert
-;; video or audio conveniently and taking notes easily.
+;; Integrate MPV, EMMS, Org and other utilities with Emacs.
 ;;
-;; Make EMMS support Windows.
+;;  - Make watch/download/convert video or audio conveniently.
+;;  - Make take video notes easily in Org Mode.
+;;  - Make EMMS support Windows.
 ;;
 ;; Installation:
-;;  - Install `emms' from elpa
-;;  - Install `mpvi' from melpa, then load it
-;;  - Install the dependencies: mpv (required), yt-dlp, ffmpeg, seam, danmaku2ass and tesseract
+;;  - Install `emms' and `mpvi' from MELPA and load them
+;;  - Install the dependencies: mpv (required), yt-dlp, ffmpeg, danmaku2ass and tesseract
 ;;
 ;; Use `mpvi-open' to open a video/audio, then control the MPV with `mpvi-seek'.
 ;;
@@ -28,7 +28,6 @@
 ;;; Code:
 
 (require 'ffap)
-(require 'emms)
 (require 'emms-player-mpv)
 
 (defgroup mpvi nil
@@ -329,7 +328,7 @@ When NOSEEK is not nil then dont try to seek but open directly."
       (let* ((optstr (mapconcat (lambda (x)
                                   (format "%s=%s" (car x) (cdr x)))
                                 (delq nil opts) ","))
-             (loadopts (if (ignore-errors (mpvi-compare-mpv-version #'> '(0 38 0)))
+             (loadopts (if (ignore-errors (mpvi-compare-mpv-version #'< '(0 38 0)))
                            (list optstr)
                          (list -1 optstr)))
              (loadhandler (lambda (_ err)
@@ -344,7 +343,7 @@ When NOSEEK is not nil then dont try to seek but open directly."
                                            "")))
                               (push path mpvi-play-history))))
              (lst `(((set_property speed 1))
-                    ((set_property keep-open ,(if emms 'no 'yes)))
+                    ((set_property keep-open yes))
                     ;; Since mpv 0.38.0, an insertion index argument is added as the third argument
                     ;; https://mpv.io/manual/master/#command-interface, loadfile
                     ((loadfile ,path replace ,@loadopts) . ,loadhandler)
@@ -1075,8 +1074,10 @@ Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
     (define-key map (kbd "j")   (lambda () (interactive) (mpvi-speed -1)))
     (define-key map (kbd "k")   (lambda () (interactive) (mpvi-speed 1)))
     (define-key map (kbd "l")   (lambda () (interactive) (mpvi-speed nil)))
-    (define-key map (kbd "v")   #'mpvi-current-playing-switch-playlist)
-    (define-key map (kbd "C-v") #'mpvi-current-playing-switch-playlist)
+    (define-key map (kbd "v")   #'mpvi-toggle-subtitle)
+    (define-key map (kbd "o")   #'mpvi-switch-playlist)
+    (define-key map (kbd "C-O") #'mpvi-switch-playlist)
+    (define-key map (kbd "O")   #'mpvi-open-externally)
     (define-key map (kbd "c")   #'mpvi-seeking-clip)
     (define-key map (kbd "C-c") #'mpvi-seeking-clip)
     (define-key map (kbd "s")   #'mpvi-seeking-capture-save-as)
@@ -1086,10 +1087,8 @@ Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
     (define-key map (kbd "C-r") #'mpvi-seeking-ocr-to-kill-ring)
     (define-key map (kbd "t")   #'mpvi-seeking-copy-sub-text)
     (define-key map (kbd "C-t") #'mpvi-seeking-copy-sub-text)
-    (define-key map (kbd "T")   #'mpvi-current-playing-load-subtitle)
+    (define-key map (kbd "T")   #'mpvi-load-subtitle)
     (define-key map (kbd "SPC") #'mpvi-seeking-pause)
-    (define-key map (kbd "o")   #'mpvi-current-playing-open-externally)
-    (define-key map (kbd "C-o") #'mpvi-current-playing-open-externally)
     (define-key map (kbd "m")   #'mpvi-toggle-mute)
     (define-key map (kbd "q")   #'abort-minibuffers)
     (define-key map (kbd "C-q") #'abort-minibuffers)
@@ -1285,7 +1284,7 @@ If NUM is not nil, go back that position first."
       (kill-new ret)))
   (throw 'mpvi-seek "OCR done into kill ring, please yank it."))
 
-(defun mpvi-current-playing-switch-playlist ()
+(defun mpvi-switch-playlist ()
   "Extract playlist from current video url.
 If any, prompt user to choose one video in playlist to play."
   (interactive)
@@ -1298,19 +1297,24 @@ If any, prompt user to choose one video in playlist to play."
         (error (message msg)))
     (user-error "No playlist found for current playing url")))
 
-(defun mpvi-current-playing-load-subtitle (subfile)
+(defun mpvi-load-subtitle (&optional subfile)
   "Load or reload the SUBFILE for current playing video."
-  (interactive (list (read-file-name "Danmaku file: " mpvi-cache-directory nil t)))
+  (interactive)
   (mpvi-check-live)
+  (unless subfile
+    (setq subfile
+          (read-file-name
+           "Danmaku file: " mpvi-cache-directory
+           (ignore-errors (file-name-nondirectory (aref (mpvi-prop 'sub-files) 0)))
+           t)))
   (cl-assert (file-regular-p subfile))
   (when (string-suffix-p ".danmaku.xml" subfile) ; bilibili
-    (require 'mpvi-ps)
-    (setq subfile (mpvi-convert-danmaku2ass subfile 'confirm)))
+    (setq subfile (mpvi-convert-danmaku subfile 'confirm)))
   (ignore-errors (mpvi-async-cmd `(sub-remove)))
   (mpvi-async-cmd `(sub-add ,subfile))
   (message "Sub file loaded!"))
 
-(defun mpvi-current-playing-open-externally ()
+(defun mpvi-open-externally ()
   "Open current playing video PATH with system program."
   (interactive)
   (mpvi-check-live)
@@ -1528,7 +1532,8 @@ ARG is the argument."
 
 ;;; Miscellaneous
 
-(require 'mpvi-ps) ; optional platform specialized config
+(require 'mpvi-sub)
+(require 'mpvi-bilibili)
 
 (provide 'mpvi)
 

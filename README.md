@@ -22,26 +22,39 @@ A key feature is adding full Windows support to EMMS via a PowerShell bridge, a 
 Except the required [mpv](https://mpv.io/) and [EMMS](https://www.gnu.org/software/emms/), there are some optional dependencies (for enhanced features):
 + [yt-dlp](https://github.com/yt-dlp/yt-dlp): For playing/downloading online videos
 + [ffmpeg](https://ffmpeg.org/): For clipping and converting media
-+ [Tesseract OCR](https://github.com/tesseract-ocr/tesseract): For OCR on screenshots
-+ [danmaku2ass](https://github.com/m13253/danmaku2ass): danmaku file converter, used when watching bilibili.com
-+ [seam](https://github.com/Borber/seam): living video extractor, used when watching some live sites
++ [tesseract](https://github.com/tesseract-ocr/tesseract): For OCR on screenshots
++ [biliass](https://github.com/yutto-dev/biliass): danmaku file converter, used for some video sites like bilibili.com
 
 Ensure mpv and any desired optional tools (yt-dlp, ffmpeg, etc.) are installed and available in your system's PATH:
 ```shell
 # For Arch Linux User
-yay -S mpv ffmpeg yt-dlp tesseract xclip danmaku2ass-git seam-git
+yay -S mpv ffmpeg yt-dlp tesseract xclip biliass-git
 
 # For macOS User
 brew install mpv ffmpeg yt-dlp tesseract
+pipx install biliass
 
 # For Windows User
 winget install mpv ffmpeg yt-dlp Tesseract-OCR
+pip install biliass
 ```
 
 Then install this package from MELPA and start to use:
 ```emacs-lisp
 (use-package mpvi :ensure t)
 (use-package mpvi :ensure t :config ...)
+```
+
+You'd better config `yt-dlp` before use, e.g., edit `~/.config/yt-dlp/config`:
+```
+--cookies-from-browser edge
+--format "bestvideo+bestaudio/best"
+```
+
+Config `mpv` by editing `~/.config/mpv/mpv.conf`, e.g.:
+```
+autofit-larger=80%
+# geometry=50%:50%
 ```
 
 ## Usage
@@ -53,8 +66,9 @@ Basic Commands:
   + `C-x b`: Choose a video from your mpvi-favor-paths
 - `M-x mpvi-clip`: Clip a video. Can be called on a file or an mpv link in Org mode
 - `M-x mpvi-emms-add`: Add a file, directory, or URL to the EMMS playlist. Supports adding entire online playlists
+- `M-x mpvi-switch-playlist`: switch video in playlist
 - `M-x mpvi-toggle-ontop|mute|border|title-bar`: toggle xxx for mpv
-- `M-x mpvi-toggle-subtitle/mpvi-subtitle-delay`: subtitle setup for mpv
+- `M-x mpvi-toggle-subtitle/mpvi-subtitle-delay/mpvi-load-subtitle`: subtitle setup for mpv
 
 When a video is playing, run `mpvi-seek` to open an interactive control interface in the minibuffer:
 - `Space` Toggle play and pause
