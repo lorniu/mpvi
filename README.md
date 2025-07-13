@@ -22,20 +22,21 @@ A key feature is adding full Windows support to EMMS via a PowerShell bridge, a 
 Except the required [mpv](https://mpv.io/) and [EMMS](https://www.gnu.org/software/emms/), there are some optional dependencies (for enhanced features):
 + [yt-dlp](https://github.com/yt-dlp/yt-dlp): For playing/downloading online videos
 + [ffmpeg](https://ffmpeg.org/): For clipping and converting media
-+ [Tesseract OCR](https://github.com/tesseract-ocr/tesseract): For OCR on screenshots
-+ [danmaku2ass](https://github.com/m13253/danmaku2ass): danmaku file converter, used when watching bilibili.com
-+ [seam](https://github.com/Borber/seam): living video extractor, used when watching some live sites
++ [tesseract](https://github.com/tesseract-ocr/tesseract): For OCR on screenshots
++ [biliass](https://github.com/yutto-dev/biliass): danmaku file converter, used for some video sites like bilibili.com
 
 Ensure mpv and any desired optional tools (yt-dlp, ffmpeg, etc.) are installed and available in your system's PATH:
 ```shell
 # For Arch Linux User
-yay -S mpv ffmpeg yt-dlp tesseract xclip danmaku2ass-git seam-git
+yay -S mpv ffmpeg yt-dlp tesseract xclip biliass-git
 
 # For macOS User
 brew install mpv ffmpeg yt-dlp tesseract
+pipx install biliass
 
 # For Windows User
 winget install mpv ffmpeg yt-dlp Tesseract-OCR
+pip install biliass
 ```
 
 Then install this package from MELPA and start to use:

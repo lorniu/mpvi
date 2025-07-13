@@ -1587,7 +1587,8 @@ ARG is the argument."
 
 ;;; Miscellaneous
 
-(require 'mpvi-ps) ; optional platform specialized config
+(require 'mpvi-sub)
+(require 'mpvi-bilibili)
 
 (provide 'mpvi)
 
