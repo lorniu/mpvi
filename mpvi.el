@@ -366,8 +366,7 @@ When NOSEEK is not nil then dont try to seek but open directly."
                                           (if title
                                               (concat (if logo (concat "/" logo)) ": "
                                                       (propertize title 'face 'font-lock-keyword-face))
-                                            "")))
-                               (push path mpvi-play-history))))
+                                            ""))))))
              (post-cmds (cl-loop for c in (append mpvi-cmds-on-play load-cmds)
                                  if (car-safe (car c)) collect c
                                  else collect (list c)))
@@ -1092,12 +1091,14 @@ Keybind `C-x b' to choose video path from `mpvi-favor-paths'."
                  (minibuffer-with-setup-hook
                      (lambda ()
                        (use-local-map (make-composed-keymap (list (current-local-map) mpvi-open-map))))
-                   (list (unwind-protect
-                             (catch 'ffap-prompter
-                               (ffap-read-file-or-url
-                                "Playing video (file or url): "
-                                (prog1 (mpvi-ffap-guesser) (ffap-highlight))))
-                           (ffap-highlight t))))))
+                   (list (let ((file-name-history mpvi-play-history))
+                           (unwind-protect
+                               (catch 'ffap-prompter
+                                 (ffap-read-file-or-url
+                                  "Playing video (file or url): "
+                                  (prog1 (mpvi-ffap-guesser) (ffap-highlight))))
+                             (setq mpvi-play-history file-name-history)
+                             (ffap-highlight t)))))))
   (unless (and (> (length path) 0) (or (mpvi-url-p path) (file-exists-p path)))
     (user-error "Not correct file or url"))
   (prog1 (setq path (if (mpvi-url-p path) path (expand-file-name path)))
