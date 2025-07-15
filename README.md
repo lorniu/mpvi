@@ -72,7 +72,7 @@ Basic Commands:
   + `C-x <return>`: Add the file/URL to the EMMS playlist instead of playing
   + `C-x C-w`: Clip/download the file/URL
   + `C-x b`: Choose a video from your mpvi-favor-paths
-- `M-x mpvi-clip`: Clip a video. Can be called on a file or an mpv link in Org mode
+- `M-x mpvi-export`: Clip a video. Can be called on a file or an mpv link in Org mode
 - `M-x mpvi-emms-add`: Add a file, directory, or URL to the EMMS playlist. Supports adding entire online playlists
 - `M-x mpvi-switch-playlist`: switch video in playlist
 - `M-x mpvi-toggle-ontop|mute|border|title-bar`: toggle xxx for mpv

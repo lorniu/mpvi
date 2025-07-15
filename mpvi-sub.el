@@ -44,10 +44,10 @@ representing the local danmaku2ass.py file.")
         "--block-keyword-patterns" ""
         "--size"      "1920x1080"
         "--font"      "sans-serif"
-        "--fontsize"  "39.0"
-        "-ds"         "10.0"
         "-dm"         "15.0"
-        "--alpha"     "0.8")
+        "-ds"         "10.0"
+        "-fs"         "39.0"
+        "-a"          "0.8")
   "Args template for the `mpvi-danmaku-converter'.
 The first element is the program, others are args, where {{input}} and
 {{output}} representing the placeholders of input and output file.")
