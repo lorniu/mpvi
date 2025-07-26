@@ -23,9 +23,8 @@
 
 (require 'cl-lib)
 
-(defvar mpvi-cache-directory)
-
 (declare-function mpvi-call-process "mpvi" t)
+(declare-function mpvi-cache-directory "mpvi" t)
 
 (defvar mpvi-danmaku-converter "biliass"
   "Command used to convert danmaku to ass format.
@@ -44,10 +43,10 @@ representing the local danmaku2ass.py file.")
         "--block-keyword-patterns" ""
         "--size"      "1920x1080"
         "--font"      "sans-serif"
-        "--fontsize"  "39.0"
-        "-ds"         "10.0"
         "-dm"         "15.0"
-        "--alpha"     "0.8")
+        "-ds"         "10.0"
+        "-fs"         "39.0"
+        "-a"          "0.8")
   "Args template for the `mpvi-danmaku-converter'.
 The first element is the program, others are args, where {{input}} and
 {{output}} representing the placeholders of input and output file.")
@@ -57,7 +56,7 @@ The first element is the program, others are args, where {{input}} and
 When CONFIRM, interactively prompt user with the arguments."
   (interactive)
   (unless danmaku-file
-    (setq danmaku-file (read-file-name "Danmaku file: " mpvi-cache-directory nil t)))
+    (setq danmaku-file (read-file-name "Danmaku file: " (mpvi-cache-directory) nil t)))
   (when (or (not (file-regular-p danmaku-file)) (equal (file-name-extension danmaku-file) "ass"))
     (user-error "Danmaku file '%s' not valid" danmaku-file))
   (setq danmaku-file (file-truename danmaku-file))
