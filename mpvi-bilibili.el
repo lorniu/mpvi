@@ -14,7 +14,9 @@
 
 (require 'json)
 (require 'cl-lib)
-(require 'mpvi-sub)
+(require 'mpvi-subtitle)
+
+(defvar mpvi-mpv-subtitle-p)
 
 (declare-function mpvi-extract-playlist "mpvi" t)
 (declare-function mpvi-ytdlp-download-subtitle "mpvi" t)
