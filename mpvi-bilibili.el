@@ -14,7 +14,9 @@
 
 (require 'json)
 (require 'cl-lib)
-(require 'mpvi-sub)
+(require 'mpvi-subtitle)
+
+(defvar mpvi-mpv-subtitle-p)
 
 (declare-function mpvi-extract-playlist "mpvi" t)
 (declare-function mpvi-ytdlp-download-subtitle "mpvi" t)
@@ -41,11 +43,11 @@ If URLONLY is not nil, don't resolve danmaku file."
       (condition-case err
           ;; danmaku.xml -> danmaku.ass
           (let ((sub (mpvi-convert-danmaku (mpvi-ytdlp-download-subtitle url))))
-            (setq ret (list :subfile sub :opts mpvi-bilibili-extra-opts)))
+            (setq ret (list :subfile sub :load-opts mpvi-bilibili-extra-opts)))
         (error (message "Bilibili load danmaku failed: %S" err))))
     ;; default
     (unless ret
-      (setq ret (list :opts mpvi-bilibili-extra-opts)))
+      (setq ret (list :load-opts mpvi-bilibili-extra-opts)))
     ;; if this is a link with query string of p=NUM
     (when (string-match "^\\(.*\\)\\?p=\\([0-9]+\\)" url)
       (nconc ret `(:playlist-url ,(match-string 1 url) :playlist-index ,(string-to-number (match-string 2 url)))))
