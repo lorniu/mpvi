@@ -16,6 +16,8 @@
 (require 'cl-lib)
 (require 'mpvi-sub)
 
+(defvar mpvi-mpv-subtitle-p)
+
 (declare-function mpvi-extract-playlist "mpvi" t)
 (declare-function mpvi-ytdlp-download-subtitle "mpvi" t)
 
