@@ -7,7 +7,7 @@
 ;; Package-Requires: ((emacs "28.1") (emms "11"))
 ;; Keywords: convenience, docs, multimedia, application
 ;; SPDX-License-Identifier: MIT
-;; Version: 1.2
+;; Version: 1.2.1
 
 ;;; Commentary:
 ;;
@@ -91,6 +91,12 @@ FMT and ARGS are like arguments in `message'."
 (defun mpvi-url-p (path)
   "Return if PATH is an URL."
   (member (url-type (url-generic-parse-url path)) '("http" "https")))
+
+(defun mpvi-url-category (url)
+  "Return a symbol as category for URL."
+  (let* ((host (url-host (url-generic-parse-url url)))
+         (pairs (split-string host "\\.")))
+    (intern (concat ":" (car (last (butlast pairs))) "." (car (last pairs))))))
 
 (defun mpvi-read-path (prompt default)
   "Read a file path using minibuffer.
@@ -228,17 +234,16 @@ Return a plist:
 - :out-url-decorator for function to decorate url when open in external program
 - others maybe used in anywhere else
 
-TYPE should be keyword as :host format, for example :www.youtube.com,
+TYPE should be keyword as :host format, for example :youtube.com,
 if it's nil then this method will be a dispatcher."
   (:method (type url &rest args)
            (unless type ; the first call
-             (let* ((typefn (lambda (url) (intern (concat ":" (url-host (url-generic-parse-url url))))))
-                    (playlist (mpvi-extract-playlist (funcall typefn url) url)))
+             (let ((playlist (mpvi-extract-playlist (mpvi-url-category url) url)))
                (if (and playlist (null (car playlist))) ; when no selected-index, return all items in playlist
                    (list :playlist-url url :playlist-items (cdr playlist))
                  (let ((purl (if playlist (nth (car playlist) (cdr playlist)))) ret)
                    (if-let* ((dest (apply #'mpvi-extract-url  ; dispatch to method
-                                          (funcall typefn (or purl url))
+                                          (mpvi-url-category (or purl url))
                                           (or purl url) args)))
                        (progn (setq ret dest)
                               (unless (plist-get ret :url)
@@ -1179,7 +1184,7 @@ When ENDP, update end time of the link, and remove end time if seek return nil."
   "Open PATH for playing with MPV.
 PATH is a local video or remote url. Prefer the one at point."
   (interactive (catch 'mpvi-open
-                 (list (mpvi-read-file-or-url "Play video (file or url): " mpvi-open-map))))
+                 (list (mpvi-read-file-or-url "Play video (file or url): "))))
   (unless (and (> (length path) 0) (or (mpvi-url-p path) (file-exists-p path)))
     (user-error "Not correct file or url"))
   (setq path (if (mpvi-url-p path) path (expand-file-name path)))
@@ -1194,9 +1199,7 @@ PATH is a local video or remote url. Prefer the one at point."
   (unless (and (> (length path) 0) (or (mpvi-url-p path) (file-exists-p path)))
     (user-error "Not correct file or url"))
   (if (mpvi-url-p path)
-      (let ((playlist (mpvi-extract-playlist
-                       (intern (concat ":" (url-host (url-generic-parse-url path)))) path t))
-            choosen)
+      (let ((playlist (mpvi-extract-playlist (mpvi-url-category path) path t)) choosen)
         (when playlist
           (setq choosen
                 (completing-read "Choose from playlist: "
@@ -1676,6 +1679,7 @@ ARG is the argument."
 ;;; Miscellaneous
 
 (require 'mpvi-subtitle)
+(require 'mpvi-living)
 (require 'mpvi-bilibili)
 
 (mpvi-emms-integrated-mode t)
