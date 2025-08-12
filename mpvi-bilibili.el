@@ -34,30 +34,31 @@
 Then the opened URL in browser will begin from TIMESTART instead."
   (format "%s%st=%s" url (if (string-match-p "\\?" url) "&" "?") timestart))
 
-(cl-defmethod mpvi-extract-url ((_ (eql :www.bilibili.com)) url &key urlonly)
+(cl-defmethod mpvi-extract-url ((_ (eql :bilibili.com)) url &key urlonly)
   "Return mpv options with danmaku file as sub-file for bilibili URL.
 If URLONLY is not nil, don't resolve danmaku file."
-  (let (ret)
-    (when (and mpvi-bilibili-enable-danmaku
-               (not urlonly) (eq mpvi-mpv-subtitle-p t))
-      (condition-case err
-          ;; danmaku.xml -> danmaku.ass
-          (let ((sub (mpvi-convert-danmaku (mpvi-ytdlp-download-subtitle url))))
-            (setq ret (list :subfile sub :load-opts mpvi-bilibili-extra-opts)))
-        (error (message "Bilibili load danmaku failed: %S" err))))
-    ;; default
-    (unless ret
-      (setq ret (list :load-opts mpvi-bilibili-extra-opts)))
-    ;; if this is a link with query string of p=NUM
-    (when (string-match "^\\(.*\\)\\?p=\\([0-9]+\\)" url)
-      (nconc ret `(:playlist-url ,(match-string 1 url) :playlist-index ,(string-to-number (match-string 2 url)))))
-    ;; begin time
-    (append ret `(:out-url-decorator ,#'mpvi-bilibili-add-begin-time-to-url))))
+  (unless (string-match-p "live/" url)
+    (let (ret)
+      (when (and mpvi-bilibili-enable-danmaku
+                 (not urlonly) (eq mpvi-mpv-subtitle-p t))
+        (condition-case err
+            ;; danmaku.xml -> danmaku.ass
+            (let ((sub (mpvi-convert-danmaku (mpvi-ytdlp-download-subtitle url))))
+              (setq ret (list :subfile sub :load-opts mpvi-bilibili-extra-opts)))
+          (error (message "Bilibili load danmaku failed: %S" err))))
+      ;; default
+      (unless ret
+        (setq ret (list :load-opts mpvi-bilibili-extra-opts)))
+      ;; if this is a link with query string of p=NUM
+      (when (string-match "^\\(.*\\)\\?p=\\([0-9]+\\)" url)
+        (nconc ret `(:playlist-url ,(match-string 1 url) :playlist-index ,(string-to-number (match-string 2 url)))))
+      ;; begin time
+      (append ret `(:out-url-decorator ,#'mpvi-bilibili-add-begin-time-to-url)))))
 
-(cl-defmethod mpvi-extract-playlist ((_ (eql :www.bilibili.com)) url &rest args)
+(cl-defmethod mpvi-extract-playlist ((_ (eql :bilibili.com)) url &rest args)
   "Extract playlist for bilibili URL. ARGS are extra arguments.
 For bilibili, url with `?p=NUM' suffix is not a playlist link."
-  (unless (string-match "^\\(.*\\)\\?p=\\([0-9]+\\)" url)
+  (unless (or (string-match-p "live/" url) (string-match "^\\(.*\\)\\?p=\\([0-9]+\\)" url))
     (apply #'mpvi-extract-playlist nil url args)))
 
 (provide 'mpvi-bilibili)

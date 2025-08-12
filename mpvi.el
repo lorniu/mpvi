@@ -7,7 +7,7 @@
 ;; Package-Requires: ((emacs "28.1") (emms "11"))
 ;; Keywords: convenience, docs, multimedia, application
 ;; SPDX-License-Identifier: MIT
-;; Version: 1.2
+;; Version: 1.2.1
 
 ;;; Commentary:
 ;;
@@ -126,6 +126,12 @@ FMT and ARGS are like arguments in `message'."
 (defun mpvi-url-p (path)
   "Return if PATH is an URL."
   (member (url-type (url-generic-parse-url path)) '("http" "https")))
+
+(defun mpvi-url-category (url)
+  "Return a symbol as category for URL."
+  (let* ((host (url-host (url-generic-parse-url url)))
+         (pairs (split-string host "\\.")))
+    (intern (concat ":" (car (last (butlast pairs))) "." (car (last pairs))))))
 
 (defun mpvi-read-path (prompt default)
   "Read a file path using minibuffer.
@@ -1290,9 +1296,7 @@ PATH is a local video or remote url. Prefer the one at point."
   (unless (and (> (length path) 0) (or (mpvi-url-p path) (file-exists-p path)))
     (user-error "Not valid file or URL: %s" path))
   (if (mpvi-url-p path)
-      (let ((playlist (mpvi-extract-playlist
-                       (intern (concat ":" (url-host (url-generic-parse-url path)))) path t))
-            choosen)
+      (let ((playlist (mpvi-extract-playlist (mpvi-url-category path) path t)) choosen)
         (when playlist
           (setq choosen
                 (completing-read "Choose from playlist: "
@@ -1850,6 +1854,7 @@ ARG is the argument."
 ;;; Miscellaneous
 
 (require 'mpvi-subtitle)
+(require 'mpvi-living)
 (require 'mpvi-bilibili)
 
 (mpvi-emms-integrated-mode t)
