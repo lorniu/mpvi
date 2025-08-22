@@ -50,11 +50,11 @@
                  (list "~/xxx/aaa.flv" nil 63)))
   (should-error (mpvi-parse-link "~/xxx/aaa.flv#fff:3")))
 
-(ert-deftest test-mpvi-extract-url ()
-  ;;(mpvi-extract-url nil "https://www.bilibili.com/video/BV17x411973o")
-  ;;(mpvi-extract-url nil "https://www.bilibili.com/video/BV1Lb411Q7yq")
-  ;;(mpvi-extract-url nil "https://www.bilibili.com/video/BV1Lb411Q7yq?p=3")
-  ;;(mpvi-extract-url nil "https://www.douyu.com/topic/crpd?rid=9999")
+(ert-deftest test-mpvi-extract ()
+  ;;(mpvi-extract nil "https://www.bilibili.com/video/BV17x411973o")
+  ;;(mpvi-extract nil "https://www.bilibili.com/video/BV1Lb411Q7yq")
+  ;;(mpvi-extract nil "https://www.bilibili.com/video/BV1Lb411Q7yq?p=3")
+  ;;(mpvi-extract nil "https://www.douyu.com/topic/crpd?rid=9999")
   )
 
 (provide 'mpvi-tests)
