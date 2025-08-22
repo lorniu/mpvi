@@ -1,1 +1,13 @@
+# -*- mode: gitignore; -*-
+
+*~
+\#*\#
 *.elc
+*-autoloads.el
+*-pkg.el
+*.info
+*.texi
+auto-save-list
+tramp
+.\#*
+.dir-locals.el
