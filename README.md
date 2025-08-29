@@ -15,6 +15,7 @@ A key feature is adding full Windows support to EMMS via a PowerShell bridge, a 
 - Many utilities with videos are integrated, like Download/Clip/Convert/Screenshot/OCR
 - Integrate with Org Mode deeply, making take interactive video notes easily
 - Add full support for EMMS on Windows, which makes this can work on all platforms
+- With the help of browser extension, play/process webpage videos through mpvi directly
 
 ## Installation
 
@@ -77,6 +78,11 @@ To start a video or playlist, use commands below:
 - `mpvi-play` open a video or playlist, no matter local or remote. Prefer the file or url under cursor.
 - `mpvi-add-playlist` add file, url or playlist to MPV player for playing later.
 - `mpvi-add-emms` add file, url or playlist to EMMS for playing later.
+
+Also you can redirect videos on a webpage to mpvi directly, steps:
+1. Install the Browser Extension (`M-x mpvi-install-browser-extension`)
+2. Start the WebSocket Server (`M-x mpvi-websocket-start`)
+3. Send Video to mpvi (right-click a video link on a webpage and select context menu under `[MPVi in Emacs]`, such as `[play]` for playing it with MPV player and `[export]` for transforming and downloading it)
 
 When the player is running, control it with commands below:
 - `mpvi-next` switch in playlist, smartly

@@ -27,7 +27,9 @@
 ;;  - Use `mpvi-control' or `mpvi-seek' to operate the playing video
 ;;  - Take interactive video notes with command `mpvi-insert'
 ;;
-;; You can also control MPV that is opened by `emms'.
+;; Miscellaneous:
+;;  - You can control MPV that is opened by `emms'
+;;  - You can open videos in webpage directly with MPV player through this
 
 ;;; Code:
 
@@ -387,7 +389,9 @@ BEG and END for ab-loop play."
                            `(metadata (display-sort-function . ,#'identity)
                                       (annotation-function . ,f1))
                          (complete-with-action action cs input pred))))
-                 (r1 (completing-read "Item: " f2 nil t))
+                 (r1 (progn
+                       (select-frame-set-input-focus (selected-frame))
+                       (completing-read "Item: " f2 nil t)))
                  (i2 (mpvi-extract nil (cadr (assoc r1 cs)))))
             (setq info (append i2 info))
             (setq item (plist-get info :item))))
@@ -2032,6 +2036,7 @@ ARG is the argument."
 (require 'mpvi-subtitle)
 (require 'mpvi-living)
 (require 'mpvi-bilibili)
+(require 'mpvi-websocket)
 
 (mpvi-emms-integrated-mode t)
 
