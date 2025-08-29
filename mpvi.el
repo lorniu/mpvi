@@ -27,7 +27,9 @@
 ;;  - Use `mpvi-control' or `mpvi-seek' to operate the playing video
 ;;  - Take interactive video notes with command `mpvi-insert'
 ;;
-;; You can also control MPV that is opened by `emms'.
+;; Miscellaneous:
+;;  - You can control MPV that is opened by `emms'
+;;  - You can open videos in webpage directly with MPV player through this
 
 ;;; Code:
 
@@ -2066,6 +2068,7 @@ ARG is the argument."
 (require 'mpvi-subtitle)
 (require 'mpvi-living)
 (require 'mpvi-bilibili)
+(require 'mpvi-websocket)
 
 (mpvi-emms-integrated-mode t)
 
