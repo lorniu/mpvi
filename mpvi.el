@@ -49,6 +49,10 @@
   "The default extra options pass to `yt-dlp' and `mpv'."
   :type 'sexp)
 
+(defcustom mpvi-ffmpeg-extra-options nil
+  "The default Extra options pass to `ffmpeg'."
+  :type 'sexp)
+
 (defvar mpvi-favor-cmds
   '((cycle pause) ab-loop
     (keypress "T") (mouse 1 1)
@@ -274,6 +278,30 @@ VERSION should be a list, like \\='(0 38 0) representing version 0.38.0."
     (funcall comparefn
              (+ (* (car current) 1000000) (* (cadr current) 1000) (caddr current))
              (+ (* (car version) 1000000) (* (cadr version) 1000) (caddr version)))))
+
+(defvar-local mpvi-transient-buffer-status nil)
+
+(cl-defun mpvi-transient-buffer (buffer &key title tips content keymap onload wconfig)
+  "Pop to BUFFER for transient task.
+TITLE and TIPS is shown with header line.
+CONTENT is the initial text of the buffer.
+KEYMAP is a key map used as the local map.
+ONLOAD is a function to execute after buffer ready.
+WCONFIG is a list as window popup action."
+  (declare (indent 1))
+  (with-current-buffer (if (bufferp buffer) buffer (get-buffer-create buffer))
+    (let* ((inhibit-read-only t)
+           (tip (if tips (mapconcat #'identity tips "  ")))
+           (hline (list (propertize " " 'display '(space :width 0.6)) title
+                        '(:eval (if mpvi-transient-buffer-status (concat "   " mpvi-transient-buffer-status)))
+                        (if tip (propertize " " 'display `((space :align-to (- right ,(length tip)))))) tip)))
+      (erase-buffer)
+      (setq header-line-format hline)
+      (insert content)
+      (if keymap (use-local-map keymap))
+      (if onload (funcall onload))
+      (set-buffer-modified-p nil)
+      (pop-to-buffer (current-buffer) wconfig))))
 
 
 ;;; MPV communication
@@ -930,9 +958,9 @@ That is:
 
 (defvar mpvi-ocr-function #'mpvi-ocr)
 
-(defvar mpvi-local-video-handler #'mpvi-convert-by-ffmpeg)
+(defvar mpvi-local-video-handler #'mpvi-ffmpeg-exec)
 
-(defvar mpvi-remote-video-handler #'mpvi-ytdl-download)
+(defvar mpvi-remote-video-handler #'mpvi-ytdl-exec)
 
 (defvar mpvi-build-link-function #'mpvi-build-mpv-link)
 
@@ -1046,72 +1074,179 @@ image."
 
 ;; ffmpeg
 
-(defcustom mpvi-ffmpeg-extra-args nil
-  "Extra options pass to `ffmpeg'."
-  :type 'string)
-
 (defcustom mpvi-ffmpeg-gif-filter "fps=10,crop=iw:ih:0:0,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"
   "Filter used when use `ffmpeg' to convert to gif file."
   :type 'string)
 
-(defun mpvi-convert-by-ffmpeg (file &optional target beg end opts)
+(defvar mpvi-ffmpeg-option-templates
+  `(("-ss 0"         . "seeks (in/out)")
+    ("-to 5"         . "end position (in/out)")
+    ("-t 5 "         . "duration (in/out)")
+    ("-fs"           . "limit file size (out)")
+    ("-q 2"          . "quality scale (out/s)")
+    ("-an/vn/sn/dn"  . "audio/video/sub/data none")
+    ("-c"            . "codec (in/out/s)")
+    "-c copy"
+    "-c:v libx264"
+    "-c:v libx265"
+    "-c:v copy"
+    "-c:a aac"
+    "-c:a mp3"
+    "-c:a copy"
+    ("-r 30"         . "frame rate (in/out/s)")
+    ("-s 1920x1080"  . "frame size (in/out/s)")
+    ("-b:v 2M"       . "bitrate")
+    ("-b:a 192k"     . "bitrate")
+    ("-ar 44100"     . "audio rate")
+    ("-ac 2"         . "audio channels")
+    ("-c:v libx264 -crf 28 -c:a copy" . "for compress")
+    ("-vn -c:a copy -b:a 192k" . "pick only the audio")
+    ("-minrate 964K -maxrate 3856K -bufsize 2000K" . "rating")
+    ("-ss 00:00:05 -vframes 1 -q:v 2" . "screenshot")
+    "-loop"
+    "-map 0"
+    "-map 0:v"
+    "-map 0:a"
+    "-map 0:s"
+    ("-filter/vf/af/filter_complex" . "filter graph, -filter:v, -filter:a (out/s)")
+    ("-af volume=30dB" . "Volume")
+    ("-vf transpose=2"  . "Transpose")
+    ("-vf scale=480:-1" . "Scale")
+    ("-vf scale=iw/2:ih/2" . "Scale")
+    ("-vf crop=600:400:0:0" . "Crop")
+    ("-vf rotate=10*PI/180:fillcolor=black" . "Rotate")
+    ("-vf hflip/vflip" . "Flip")
+    ("-vf \"drawtext=text='hello':fontsize=36:x=10:y=H-th-10\"" . "Text")
+    ("-vf eq=brightness=0.1:contrast=1.2:saturation=1.3" . "Eq")
+    ("-vf format=gray" . "Turn to black/white mode")
+    ("-vf boxblur=5:1" . "Blur")
+    ("-vf reverse -af areverse" . "Reverse")
+    (,(format "-vf %s" mpvi-ffmpeg-gif-filter) . "Gen Gif")
+    ("-i watermark.png -filter_complex \"overlay=W-w-10:10\"" . "Watermark")
+    ("-i watermark.png -filter_complex \"overlay=x='if(gte(t,2), -w+(t-2)*50, NAN)':y=10\"" . "Watermark"))
+  "Every item is an option string or (cons option description).")
+
+(defvar mpvi-ffmpeg-load-hook nil)
+
+(defun mpvi-ffmpeg-exec (file &optional target beg end)
   "Convert local video FILE from BEG to END using ffmpeg, output to TARGET.
-This can be used to cut/resize/reformat and so on.
-OPTS is a string, pass to `ffmpeg' when it is not nil."
+This can be used to cut/resize/reformat and so on."
   (cl-assert (file-regular-p file))
   (unless (executable-find "ffmpeg")
     (user-error "Program `ffmpeg' not found"))
-  (let* ((beg (if (numberp beg) (format " -ss %s" beg) ""))
-         (end (if (numberp end) (format " -to %s" end) ""))
+  (let* ((beg (if (numberp beg) (format " -ss %s" beg)))
+         (end (if (numberp end) (format " -to %s" end)))
          (target (expand-file-name
                   (or target (format-time-string "mpv-video-%s.mp4"))
                   mpvi-last-save-directory))
-         (extra (concat (if (member (file-name-extension target) '("gif" "webp"))
-                            (format " -vf \"%s\" -loop 0" mpvi-ffmpeg-gif-filter)
-                          " -c copy")
-                        (if (or opts mpvi-ffmpeg-extra-args)
-                            (concat " " (string-trim (or opts mpvi-ffmpeg-extra-args))))))
-         (command (string-trim
-                   (minibuffer-with-setup-hook
-                       (lambda ()
-                         (use-local-map (make-composed-keymap nil (current-local-map)))
-                         (local-set-key (kbd "C-x C-q")
-                                        (lambda ()
-                                          (interactive)
-                                          (let ((inhibit-read-only t))
-                                            (set-text-properties (minibuffer-prompt-end) (point-max) nil))))
-                         (local-set-key (kbd "<return>")
-                                        (lambda ()
-                                          (interactive)
-                                          (let ((cmd (minibuffer-contents)))
-                                            (with-temp-buffer
-                                              (insert (string-trim cmd))
-                                              (let ((quote (if (member (char-before) '(?' ?\")) (char-before))))
-                                                (when (re-search-backward (if quote (format " +%c" quote) " +") nil t)
-                                                  (setq target (buffer-substring (match-end 0) (if quote (- (point-max) 1) (point-max)))))))
-                                            (if (file-exists-p target)
-                                                (message
-                                                 (propertize
-                                                  (format "Output file %s is already exist!" target)
-                                                  'face 'font-lock-warning-face))
-                                              (exit-minibuffer))))))
-                     (read-string "Confirm: "
-                                  (concat (propertize
-                                           (concat "ffmpeg"
-                                                   (propertize " -loglevel error" 'invisible t)
-                                                   (format " -i %s" (expand-file-name file)))
-                                           'face 'font-lock-constant-face 'read-only t)
-                                          beg end extra (format " \"%s\"" target)))))))
-    (make-directory (file-name-directory target) t) ; ensure directory
-    (setq mpvi-last-save-directory (file-name-directory target)) ; record the dir
-    (with-temp-buffer
-      (mpvi-log "Convert file %s" file)
-      (apply #'mpvi-call-process (split-string-and-unquote command))
-      (if (file-exists-p target)
-          (prog1 target
-            (kill-new target)
-            (message "Save to %s done." (propertize target 'face 'font-lock-keyword-face)))
-        (user-error "Convert with ffmpeg failed: %s" (string-trim (buffer-string)))))))
+         (extra (mapconcat (lambda (c) (if (eq (aref c 0) ?-) c (format "%S" c)))
+                           (append (if (member (file-name-extension target) '("gif" "webp"))
+                                       (list "-vf" mpvi-ffmpeg-gif-filter "-loop" "0")
+                                     (list "-c" "copy"))
+                                   mpvi-ytdl-extra-options)
+                           " "))
+         (buffer "*mpvi-ffmpeg-exec*")
+         (help-tips (propertize "<global_opts> <in_opts> -i in.file <out_opts> out.file" 'face 'font-lock-comment-face)))
+    (cl-labels ((bs ()
+                  (buffer-substring-no-properties (point-min) (point-max)))
+                (ensure-dest ()
+                  (let ((dest (save-excursion
+                                (goto-char (point-max))
+                                (cl-loop while (re-search-backward "\"" nil t)
+                                         when (get-pos-property (point) 'read-only)
+                                         return (when (looking-at "\"\\([^\"]+\\)\"")
+                                                  (match-string 1))))))
+                    (unless dest
+                      (state "error" 'warning)
+                      (user-error "Not valid output file"))
+                    (when (file-exists-p dest)
+                      (state "error" 'warning)
+                      (user-error "Output file `%s' already exist" dest))
+                    (make-directory (file-name-directory dest) t)
+                    (setq mpvi-last-save-directory (file-name-directory target))
+                    dest))
+                (convert ()
+                  (interactive)
+                  (state "converting...")
+                  (let ((dest (ensure-dest))
+                        (cmd (split-string-and-unquote (string-replace "\n" " " (concat "ffmpeg " (bs))))))
+                    (mpvi-log "Convert %s" file)
+                    (condition-case err
+                        (with-temp-buffer
+                          (apply #'mpvi-call-process cmd)
+                          (goto-char (point-min))
+                          (if (save-excursion (re-search-forward "^\\(ERROR\\|Error\\) " nil t))
+                              (progn
+                                (state "error" 'warning)
+                                (message "ffmpeg execution failed: %s" (string-trim (bs))))
+                            (quit)
+                            (kill-new dest)
+                            (message "Save to %s done." (propertize dest 'face 'font-lock-keyword-face))))
+                      (error (state "error" 'warning) (message "%s" err)))))
+                (link ()
+                  (interactive)
+                  (let ((cmd (string-replace "\n" " " (concat "ffmpeg " (bs)))))
+                    (ensure-dest)
+                    (quit)
+                    (kill-new cmd)
+                    (message "Saved %s to kill ring." (propertize cmd 'face 'font-lock-keyword-face))))
+                (snippet ()
+                  (interactive)
+                  (insert (mpvi--read-cmd-option "Insert ffmpeg option: " mpvi-ffmpeg-option-templates)))
+                (quit ()
+                  (interactive)
+                  (state help-tips)
+                  (kill-buffer-and-window))
+                (state (s &optional face)
+                  (with-current-buffer (get-buffer buffer)
+                    (setq mpvi-transient-buffer-status
+                          (if s (propertize s 'face (or face 'font-lock-string-face))))
+                    (force-mode-line-update)
+                    (redisplay))))
+      (mpvi-transient-buffer buffer
+        :title "ffmpeg"
+        :tips (list (cl-loop for (c . d) in '(("C-c C-c" . "Convert")
+                                              ("C-c C-w" . "Link")
+                                              ("C-c C-i" . "Snippet")
+                                              ("C-c C-k" . "Quit"))
+                             concat (concat " " (propertize c 'face 'font-lock-keyword-face) " " d)))
+        :content (concat "-loglevel error\n"
+                         (propertize (format "-i %S" (expand-file-name file))
+                                     'read-only t 'front-sticky t 'face 'underline)
+                         "\n"
+                         (if beg (concat beg "\n"))
+                         (if end (concat end "\n"))
+                         (unless (string-blank-p extra) (concat extra "\n"))
+                         (let* ((p (format "%S" target)) (n (length p)))
+                           (add-text-properties 0 1 '(read-only t front-sticky t) p)
+                           (add-text-properties 0 n '(face underline) p)
+                           p))
+        :keymap (let ((map (make-sparse-keymap)))
+                  (define-key map (kbd "C-c C-c") #'convert)
+                  (define-key map (kbd "C-c C-w") #'link)
+                  (define-key map (kbd "C-c C-i") #'snippet)
+                  (define-key map (kbd "C-c C-k") #'quit)
+                  map)
+        :onload (lambda ()
+                  (hl-line-mode 1)
+                  (state help-tips)
+                  (run-hooks 'mpvi-ffmpeg-load-hook))
+        :wconfig '((display-buffer-in-direction) (direction . bottom))))))
+
+(defun mpvi--read-cmd-option (prompt options)
+  "Read with PROMPT for one option from OPTIONS."
+  (let* ((os (cl-remove-if-not #'consp options))
+         (len (min 50 (if os (+ 2 (apply #'max (mapcar (lambda (c) (length (car c))) os))) 20))))
+    (completing-read
+     prompt
+     (lambda (input pred action)
+       (if (eq action 'metadata)
+           `(metadata (display-sort-function . ,#'identity)
+                      (annotation-function . ,(lambda (c)
+                                                (when-let* ((item (assoc c options)))
+                                                  (concat (make-string (max 2 (- len (length c))) ? )
+                                                          (cdr item))))))
+         (complete-with-action action options input pred))))))
 
 ;; yt-dlp
 
@@ -1126,6 +1261,30 @@ A complex example:
 
 Meaning of `bv*+ba/b' is:
   merge the best video with best audio-only, or return the best merged.")
+
+(defvar mpvi-ytdl-option-templates
+  '("-t mp3|mp4"
+    "-f bv*+ba/b"
+    "-o %(title)s.%(ext)s"
+    ("-o %(playlist_index)s - %(title)s.%(ext)s" . "output template for playlist")
+    ("--match-filters like_count>?100" . "filter for playlist")
+    "--continue"
+    "--concurrent-fragments 2"
+    "--proxy http://127.0.0.1:1080"
+    ("--downloader aria2c" . "external downloader used instead of native")
+    "--downloader-args ffmpeg:-ss 0"
+    ("--downloader ffmpeg --downloader-args \"ffmpeg:-ss 0 -to 5\"" . "postprocess with ffmpeg")
+    "--cookies-from-browser edge"
+    "--write-description"
+    ("--write-subs" . "also download subtitle")
+    "--convert-subs ass|srt|none"
+    "--embed-subs"
+    "--embed-thumbnail"
+    "--embed-metadata"
+    "--embed-chapters")
+  "Every item is an option string or (cons option description).")
+
+(defvar mpvi-ytdl-load-hook nil)
 
 (defun mpvi-ytdl-dump-url (url)
   "Return metadata of video URL."
@@ -1177,65 +1336,101 @@ FIELD can be id/title/urls/description/format/thumbnail/formats_table and so on.
            (complete-with-action action items input pred)))
        nil nil nil nil mpvi-ytdl-default-format))))
 
-(defun mpvi-ytdl-download (url &optional target beg end)
+(defun mpvi-ytdl-exec (url &optional target beg end)
   "Download and clip video for URL to TARGET. Use BEG and END for trim."
   (cl-assert (mpvi-url-p url))
   (unless (and (executable-find "yt-dlp") (executable-find "ffmpeg"))
     (user-error "Programs `yt-dlp' and `ffmpeg' should be installed"))
-  (let* ((fmts (mpvi-ytdl-pick-formats url))
-         (target (if target
-                     (expand-file-name target)
-                   (let* ((meta (mpvi-ytdl-dump-url url))
-                          (title (alist-get 'title meta))
-                          (ext (or (and (= 1 (length fmts))
-                                        (alist-get 'ext (cl-find-if (lambda (c) (equal (alist-get 'format_id c) (car fmts)))
-                                                                    (alist-get 'formats meta))))
-                                   (alist-get 'ext meta)
-                                   "mp4")))
-                     (expand-file-name (thread-last
-                                         (format "%s_%s.%s" title (string-join fmts "+") ext)
-                                         (string-replace "/" "-"))
-                                       mpvi-last-save-directory))))
+  (let* ((meta (mpvi-ytdl-dump-url url))
+         (playlistp (alist-get 'entries meta))
+         (fmts (if playlistp (list mpvi-ytdl-default-format) (mpvi-ytdl-pick-formats url)))
+         (title (alist-get 'title meta))
+         (up (or (alist-get 'uploader meta) (alist-get 'series meta)))
          (beg (if (numberp beg) (format " -ss %s" beg)))
          (end (if (numberp end) (format " -to %s" end)))
          (extra (mapconcat (lambda (c) (format " %s" c)) mpvi-ytdl-extra-options " "))
-         (command (string-trim
-                   (minibuffer-with-setup-hook
-                       (lambda ()
-                         (backward-char)
-                         (use-local-map (make-composed-keymap nil (current-local-map)))
-                         (local-set-key (kbd "<return>")
-                                        (lambda ()
-                                          (interactive)
-                                          (let ((cmd (minibuffer-contents)))
-                                            (with-temp-buffer
-                                              (insert cmd)
-                                              (goto-char (point-min))
-                                              (when (re-search-forward " -o +['\"]?\\([^'\"]+\\)" nil t)
-                                                (setq target (match-string 1)))
-                                              (if (file-exists-p target)
-                                                  (message
-                                                   (propertize
-                                                    (format "Output file %s is already exist!" target)
-                                                    'face 'font-lock-warning-face))
-                                                (exit-minibuffer)))))))
-                     (read-string
-                      "Confirm: "
-                      (concat (propertize (concat "yt-dlp " url) 'face 'font-lock-constant-face 'read-only t)
-                              " -f \"" (string-join fmts "+") "\""
-                              (if (or beg end) " --downloader ffmpeg --downloader-args \"ffmpeg_i:")
-                              beg end (if (or beg end) "\"") (if (string-blank-p extra) " " extra)
-                              " -o \"" target "\""))))))
-    (make-directory (file-name-directory target) t) ; ensure directory
-    (setq mpvi-last-save-directory (file-name-directory target)) ; record the dir
-    (with-temp-buffer
-      (mpvi-log "Download/Clip url %s" url)
-      (apply #'mpvi-call-process (split-string-and-unquote command))
-      (if (file-exists-p target)
-          (prog1 target
-            (kill-new target)
-            (message "Save to %s done." (propertize target 'face 'font-lock-keyword-face)))
-        (user-error "Download and clip with yt-dlp/ffmpeg failed: %s" (string-trim (buffer-string)))))))
+         (buffer "*mpvi-ytdl-exec*")
+         dir file)
+    (when target
+      (if playlistp
+          (setq dir target)
+        (setq dir (file-name-directory target)
+              file (file-name-nondirectory target))))
+    (unless dir
+      (setq dir mpvi-last-save-directory))
+    (unless file
+      (setq file (concat (if playlistp "%(playlist)s/%(playlist_index)s - ")
+                         "%(title)s_" (string-replace "/" "-or-" (string-join fmts "+"))
+                         ".%(ext)s")))
+    (cl-labels ((bs ()
+                  (buffer-substring-no-properties (point-min) (point-max)))
+                (down ()
+                  (interactive)
+                  (state "downloading...")
+                  (setq mpvi-last-save-directory dir) ; record the dir
+                  (let ((cmd (split-string-and-unquote (string-replace "\n" " " (bs)))))
+                    (mpvi-log "Download/Clip %s" url)
+                    (condition-case err
+                        (with-temp-buffer
+                          (apply #'mpvi-call-process cmd)
+                          (goto-char (point-min))
+                          (if (save-excursion (re-search-forward "has already been downloaded" nil t))
+                              (state "output file is already exist, rename is required!" 'warning)
+                            (if (save-excursion (re-search-forward "^ERROR" nil t))
+                                (progn
+                                  (state "error" 'warning)
+                                  (message "Download and clip with yt-dlp/ffmpeg failed: %s" (string-trim (bs))))
+                              (let ((dest (or (and (re-search-forward "Destination: \\([^ ]+\\)$" nil t)
+                                                   (match-string 1))
+                                              (expand-file-name file dir))))
+                                (quit)
+                                (kill-new dest)
+                                (message "Save to %s done." (propertize dest 'face 'font-lock-keyword-face))))))
+                      (error (state "error" 'warning) (message "%s" err)))))
+                (link ()
+                  (interactive)
+                  (let ((cmd (string-replace "\n" " " (bs))))
+                    (quit)
+                    (kill-new cmd)
+                    (message "Saved %s to kill ring." (propertize cmd 'face 'font-lock-keyword-face))))
+                (snippet ()
+                  (interactive)
+                  (insert (mpvi--read-cmd-option "Insert yt-dlp option: " mpvi-ytdl-option-templates)))
+                (quit ()
+                  (interactive)
+                  (state nil)
+                  (kill-buffer-and-window))
+                (state (s &optional face)
+                  (with-current-buffer (get-buffer buffer)
+                    (setq mpvi-transient-buffer-status
+                          (if s (propertize s 'face (or face 'font-lock-string-face))))
+                    (force-mode-line-update)
+                    (redisplay))))
+      (mpvi-transient-buffer buffer
+        :title (concat "[" up "] " title (if playlistp " (playlist)"))
+        :tips (list (cl-loop for (c . d) in '(("C-c C-c" . "Down")
+                                              ("C-c C-w" . "Link")
+                                              ("C-c C-i" . "Snippet")
+                                              ("C-c C-k" . "Quit"))
+                             concat (concat " " (propertize c 'face 'font-lock-keyword-face) " " d)))
+        :content (concat (propertize (concat "yt-dlp " url) 'face 'font-lock-constant-face 'read-only t 'front-sticky t) "\n"
+                         (format "-f %S\n" (string-join fmts "+"))
+                         (when (or beg end)
+                           (concat "--downloader ffmpeg --downloader-args \"ffmpeg:" beg end "\"\n"))
+                         (unless (string-blank-p extra) (concat extra "\n"))
+                         (format "-P %S\n" dir)
+                         (format "-o %S" file))
+        :keymap (let ((map (make-sparse-keymap)))
+                  (define-key map (kbd "C-c C-c") #'down)
+                  (define-key map (kbd "C-c C-w") #'link)
+                  (define-key map (kbd "C-c C-i") #'snippet)
+                  (define-key map (kbd "C-c C-k") #'quit)
+                  map)
+        :onload (lambda ()
+                  (hl-line-mode 1)
+                  (state nil)
+                  (run-hooks 'mpvi-ytdl-load-hook))
+        :wconfig '((display-buffer-in-direction) (direction . bottom))))))
 
 (defun mpvi-ytdl-download-subtitle (url &optional prefix)
   "Download subtitle for URL and save as file named begin with PREFIX."
